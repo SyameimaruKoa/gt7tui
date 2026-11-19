@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import math
+
+from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Static
@@ -10,8 +14,55 @@ from ...config import AppConfig
 from ...core.state import RuntimeState
 
 
+def _clamp01(x: float) -> float:
+    return max(0.0, min(1.0, x))
+
+
+def _center_meter(label: str, value: float, lim: float, unit: str = "", width: int = 21, color_pos: str = "cyan", color_neg: str = "magenta") -> Text:
+    lim = max(1e-6, lim)
+    ratio = max(-1.0, min(1.0, value / lim))
+    mid = width // 2
+    pos = mid + int(round(ratio * (mid - 1)))
+    pos = max(0, min(width - 1, pos))
+    active = color_pos if ratio >= 0 else color_neg
+    t = Text()
+    t.append(f"{label:<5}")
+    t.append("[", style="grey50")
+    for i in range(width):
+        if i == pos:
+            t.append("◆", style=f"bold {active}")
+        elif i == mid:
+            t.append("┼", style="white")
+        elif (mid < i <= pos) or (pos <= i < mid):
+            t.append("━", style=active)
+        else:
+            t.append("·", style="grey30")
+    t.append("]", style="grey50")
+    t.append(f" {value:+8.3f}{unit}")
+    return t
+
+
+def _mag_meter(label: str, mag: float, vmax: float, unit: str = "", color: str = "green", width: int = 16) -> Text:
+    vmax = max(1e-6, vmax)
+    ratio = _clamp01(abs(mag) / vmax)
+    pos = int(round(ratio * (width - 1)))
+    t = Text()
+    t.append(f"{label:<5}")
+    t.append("[", style="grey50")
+    for i in range(width):
+        if i == pos:
+            t.append("▮", style=f"bold {color}")
+        elif i < pos:
+            t.append("━", style=color)
+        else:
+            t.append("─", style="grey23")
+    t.append("]", style="grey50")
+    t.append(f" {abs(mag):7.3f}{unit}")
+    return t
+
+
 def _fmt_vec(v) -> str:
-    return f"X={v.x:9.4f}  Y={v.y:9.4f}  Z={v.z:9.4f}"
+    return f"X={v.x:+9.4f}  Y={v.y:+9.4f}  Z={v.z:+9.4f}"
 
 
 class DetailPane(Container):
@@ -34,55 +85,134 @@ class DetailPane(Container):
 
     def update_view(self, snap: RuntimeState, cfg: AppConfig) -> None:
         f = snap.frame
-        # Session / general
+        # Session / general as instrument readouts
         st = Table.grid(padding=(0, 1))
-        st.add_column(justify="left")
         if f:
-            st.add_row(f"Car ID: {f.car_id}")
-            st.add_row(f"Packet: {f.packet_id}  Raw: {f.raw_len} bytes")
-            st.add_row(f"Time on track: {f.time_on_track_ms/1000.0:,.1f} s")
-            st.add_row(f"Est top speed: {f.est_top_speed} km/h")
-            st.add_row(f"Ride height: {f.ride_height_mm:.1f} mm")
-            st.add_row(f"Oil: {f.oil_temp_c:.1f}°C  {f.oil_pressure_bar:.2f} bar")
-            st.add_row(f"Water: {f.water_temp_c:.1f}°C")
-            st.add_row(f"Clutch: {f.clutch:.3f}  Engaged: {f.clutch_engaged:.3f}  RPM after: {f.rpm_after_clutch:.0f}")
-            st.add_row(f"Throttle: {f.throttle:.1f}%  Brake: {f.brake:.1f}%")
-            st.add_row(f"Speed: {f.speed_kph:.1f} km/h  RPM: {f.rpm:.0f}")
+            st.add_row(Text.assemble(("Car ID: ", "grey70"), (str(f.car_id), "bold white"), ("   Packet: ", "grey70"), (str(f.packet_id), "cyan"), ("   Raw: ", "grey70"), (f"{f.raw_len} B", "white")))
+            st.add_row(Text.assemble(("Time: ", "grey70"), (f"{f.time_on_track_ms/1000.0:,.1f} s", "bold white"), ("   Est Vmax: ", "grey70"), (f"{f.est_top_speed} km/h", "bright_cyan")))
+            st.add_row(Text.assemble(("RideH: ", "grey70"), (f"{f.ride_height_mm:5.1f} mm", "yellow")))
+            # analog mini meters
+            st.add_row(_mag_meter("OilT", f.oil_temp_c, 150.0, "°", "orange3"))
+            st.add_row(_mag_meter("Watr", f.water_temp_c, 130.0, "°", "dodger_blue2"))
+            st.add_row(_mag_meter("OilP", f.oil_pressure_bar, 10.0, "b", "yellow3"))
+            st.add_row(_mag_meter("Thro", f.throttle, 100.0, "%", "green"))
+            st.add_row(_mag_meter("Brak", f.brake, 100.0, "%", "red"))
+            st.add_row(_mag_meter("Clut", min(1.5, max(0.0, f.clutch)) * 100.0 / 150.0 if f.clutch > 1.5 else f.clutch * 100.0, 100.0, "%", "blue"))
+            st.add_row(Text.assemble(("Clutch engage: ", "grey70"), (f"{f.clutch_engaged:.3f}", "white"), ("  RPM after: ", "grey70"), (f"{f.rpm_after_clutch:.0f}", "white")))
             boost = f"{f.boost_kpa:.2f} kPa" if f.has_turbo else "N/A"
-            st.add_row(f"Boost: {boost}")
+            st.add_row(Text.assemble(("Boost: ", "grey70"), (boost, "cyan" if f.has_turbo else "grey50"), ("   Speed: ", "grey70"), (f"{f.speed_kph:.1f} km/h", "bold bright_cyan"), ("   RPM: ", "grey70"), (f"{f.rpm:.0f}", "bold green")))
         else:
-            st.add_row("No telemetry frame")
+            st.add_row(Text("No telemetry frame", style="dim"))
         self.session.update(Panel(st, title="Session / Vehicle", border_style="cyan"))
 
-        # Gearing
+        # Gearing as horizontal bars
         gt = Table.grid(padding=(0, 1))
-        if f:
+        if f and f.gear_ratios:
+            vals = [v for v in f.gear_ratios if v > 0]
+            vmax = max(vals) if vals else 1.0
+            cur = f.gear
             for i, ratio in enumerate(f.gear_ratios, start=1):
-                gt.add_row(f"{i}: {ratio:8.3f}")
-            gt.add_row(f"Unknown: {f.gear_ratio_unknown:8.3f}")
+                active = (i == cur)
+                color = "bold bright_yellow" if active else "grey70"
+                bar_w = 18
+                r = _clamp01(ratio / vmax) if vmax > 0 else 0
+                filled = int(round(r * bar_w))
+                bar = Text()
+                bar.append(f"{i}: ", style=color)
+                bar.append("[", style="grey50")
+                for j in range(bar_w):
+                    if j < filled:
+                        bar.append("█", style="bright_yellow" if active else "cyan")
+                    else:
+                        bar.append("░", style="grey23")
+                bar.append("]", style="grey50")
+                bar.append(f" {ratio:7.3f}", style=color)
+                if active:
+                    bar.append(" ◀", style="bold bright_yellow")
+                gt.add_row(bar)
+            gt.add_row(Text(f"U: {f.gear_ratio_unknown:7.3f}", style="grey50"))
         else:
-            gt.add_row("No data")
+            gt.add_row(Text("No data", style="dim"))
         self.gearing.update(Panel(gt, title="Gearing", border_style="magenta"))
 
-        # Dynamics
-        dt = Table.grid(padding=(0, 1))
+        # Dynamics as meters
+        dt = Table.grid(padding=(0, 0))
         if f:
-            dt.add_row("Position (m):  " + _fmt_vec(f.position_xyz))
-            dt.add_row("Velocity (m/s):" + _fmt_vec(f.velocity_xyz))
-            dt.add_row(f"Rotation PYR:  P={f.rotation_pyr.x:9.4f}  Y={f.rotation_pyr.y:9.4f}  R={f.rotation_pyr.z:9.4f}")
-            dt.add_row("Angular (r/s): " + _fmt_vec(f.angular_velocity_xyz))
-            dt.add_row(f"North/South:   {f.north_south:9.4f}")
+            # Position
+            dt.add_row(Text("Position (m)", style="bold grey70"))
+            dt.add_row(_center_meter("X", f.position_xyz.x, 1000.0, "m", color_pos="green", color_neg="red"))
+            dt.add_row(_center_meter("Y", f.position_xyz.y, 200.0, "m", color_pos="green", color_neg="red"))
+            dt.add_row(_center_meter("Z", f.position_xyz.z, 1000.0, "m", color_pos="green", color_neg="red"))
+            pm = math.sqrt(f.position_xyz.x**2 + f.position_xyz.y**2 + f.position_xyz.z**2)
+            dt.add_row(_mag_meter("|P|", pm, 1500.0, "m", "bright_green"))
+            # Velocity
+            dt.add_row(Text("Velocity (m/s)", style="bold grey70"))
+            vlim = 120.0
+            dt.add_row(_center_meter("X", f.velocity_xyz.x, vlim, "", color_pos="cyan", color_neg="magenta"))
+            dt.add_row(_center_meter("Y", f.velocity_xyz.y, 40.0, "", color_pos="cyan", color_neg="magenta"))
+            dt.add_row(_center_meter("Z", f.velocity_xyz.z, vlim, "", color_pos="cyan", color_neg="magenta"))
+            vm = math.sqrt(f.velocity_xyz.x**2 + f.velocity_xyz.y**2 + f.velocity_xyz.z**2)
+            dt.add_row(_mag_meter("|V|", vm, 130.0, "", "bright_cyan"))
+            # Rotation / angular
+            dt.add_row(Text("Rotation PYR (rad)", style="bold grey70"))
+            dt.add_row(_center_meter("P", f.rotation_pyr.x, math.pi, "", color_pos="yellow", color_neg="blue"))
+            dt.add_row(_center_meter("Y", f.rotation_pyr.y, math.pi, "", color_pos="yellow", color_neg="blue"))
+            dt.add_row(_center_meter("R", f.rotation_pyr.z, math.pi, "", color_pos="yellow", color_neg="blue"))
+            dt.add_row(Text("Angular vel (r/s)", style="bold grey70"))
+            dt.add_row(_center_meter("X", f.angular_velocity_xyz.x, 5.0, "", color_pos="orange3", color_neg="purple"))
+            dt.add_row(_center_meter("Y", f.angular_velocity_xyz.y, 5.0, "", color_pos="orange3", color_neg="purple"))
+            dt.add_row(_center_meter("Z", f.angular_velocity_xyz.z, 5.0, "", color_pos="orange3", color_neg="purple"))
+            dt.add_row(_center_meter("N/S", f.north_south, 1.0, "", color_pos="white", color_neg="grey50"))
         else:
-            dt.add_row("No data")
+            dt.add_row(Text("No data", style="dim"))
         self.dynamics.update(Panel(dt, title="Dynamics", border_style="green"))
 
-        # Flags / unknown
-        ft = Table.grid(padding=(0, 1))
+        # Flags as lamps, unknown as meters
+        ft = Table.grid(padding=(0, 0))
         if f:
-            ft.add_row(f"0x8E: {f.flags_8e:08b}  0x8F: {f.flags_8f:08b}  0x93: {f.flags_93:08b}")
+            def lamps(label: str, val: int) -> Text:
+                t = Text()
+                t.append(f"{label} ", style="grey70")
+                for b in range(7, -1, -1):
+                    on = (val >> b) & 1
+                    if on:
+                        t.append("●", style="bold bright_green")
+                    else:
+                        t.append("○", style="grey35")
+                t.append(f"  0x{val:02X}", style="cyan")
+                return t
+            ft.add_row(Text("Flags", style="bold grey70"))
+            ft.add_row(lamps("0x8E", f.flags_8e))
+            ft.add_row(lamps("0x8F", f.flags_8f))
+            ft.add_row(lamps("0x93", f.flags_93))
+            ft.add_row(Text(""))
+            ft.add_row(Text("Unknown fields", style="bold grey70"))
             keys = list(f.unknown_floats.keys())
+            # find a reasonable scale per value for visual meter
             for k in keys:
-                ft.add_row(f"{k}: {f.unknown_floats[k]:11.5f}")
+                v = f.unknown_floats[k]
+                lim = max(1.0, abs(v) * 1.5, 100.0)
+                # compact centered meter
+                t = Text()
+                t.append(f"{k} ", style="grey70")
+                ratio = max(-1.0, min(1.0, v / lim))
+                w = 13
+                mid = w // 2
+                pos = mid + int(round(ratio * (mid - 1)))
+                pos = max(0, min(w - 1, pos))
+                t.append("[", style="grey50")
+                for i in range(w):
+                    if i == pos:
+                        t.append("◆", style="bold yellow")
+                    elif i == mid:
+                        t.append("┼", style="white")
+                    elif (mid < i <= pos) or (pos <= i < mid):
+                        t.append("━", style="yellow")
+                    else:
+                        t.append("·", style="grey30")
+                t.append("]", style="grey50")
+                t.append(f" {v:+9.3f}", style="white")
+                ft.add_row(t)
         else:
-            ft.add_row("No data")
+            ft.add_row(Text("No data", style="dim"))
         self.flags.update(Panel(ft, title="Flags / Unknown", border_style="yellow"))
