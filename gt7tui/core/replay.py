@@ -4,7 +4,7 @@ import threading
 import time
 from typing import Optional
 
-from .capture import CaptureReader
+from .capture import CaptureReader, DIR_RECV
 from .decoder import decode_packet
 from .protocol import decrypt_packet
 from .state import StateStore
@@ -39,10 +39,11 @@ class ReplaySource:
                 reader = CaptureReader(self.path)
                 prev_ts: float | None = None
                 any_record = False
-                for ts, payload in reader.records():
+                for rec in reader.records():
                     if self._stop.is_set():
                         return
                     any_record = True
+                    ts = rec.ts
                     if prev_ts is not None:
                         delay = (ts - prev_ts) / self.speed
                         if delay > 0:
@@ -54,8 +55,12 @@ class ReplaySource:
                                     break
                                 time.sleep(min(0.05, remaining))
                     prev_ts = ts
+                    # Only received telemetry packets are fed into the decoder/state.
+                    # Sent packets (e.g. heartbeats) are kept in the capture for completeness.
+                    if rec.direction != DIR_RECV:
+                        continue
                     self.store.mark_packet()
-                    ddata = decrypt_packet(payload)
+                    ddata = decrypt_packet(rec.payload)
                     if not ddata:
                         self.store.mark_dropped()
                         continue

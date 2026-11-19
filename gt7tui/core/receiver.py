@@ -5,7 +5,7 @@ import threading
 import time
 from typing import Callable, Optional
 
-from .capture import CaptureWriter
+from .capture import CaptureWriter, DIR_RECV, DIR_SEND
 from .decoder import TelemetryFrame, decode_packet
 from .protocol import decrypt_packet
 from .state import StateStore
@@ -55,7 +55,13 @@ class LiveReceiver:
 
     def _send_heartbeat(self, sock: socket.socket) -> None:
         try:
-            sock.sendto(b"A", (self.ps_ip, self.send_port))
+            payload = b"A"
+            sock.sendto(payload, (self.ps_ip, self.send_port))
+            if self._recorder:
+                try:
+                    self._recorder.write(payload, direction=DIR_SEND, port=self.send_port)
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -93,7 +99,7 @@ class LiveReceiver:
                         self.store.mark_packet()
                         if self._recorder:
                             try:
-                                self._recorder.write(data)
+                                self._recorder.write(data, direction=DIR_RECV, port=self.recv_port)
                             except Exception:
                                 pass
                         pkt_count += 1

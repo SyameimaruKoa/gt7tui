@@ -7,7 +7,7 @@ Receives GT7 UDP telemetry, decodes packets (Salsa20 + struct offsets), and disp
 
 ## Features
 - Live mode (`--live <PS4_IP>`), replay mode (`--replay <file>`), and demo mode (`--demo`)
-- Record raw UDP packets during live mode (`--record <file>`) for offline verification
+- Record all UDP communication during live mode (`--record <file>`) for offline verification (received telemetry and sent heartbeats, with timestamps and direction)
 - Visual dashboard: RPM bar gauge with rev warning/limiter zones, large gear/speed, throttle/brake/clutch bars
 - Tyre view: 4-wheel layout, temperature heat indication, slip indicator, suspension/speed/diameter
 - Lap/timing: current/best/last and delta (bar/color when comparable)
@@ -53,7 +53,7 @@ python -m gt7tui
 # Live telemetry from PS4
 python -m gt7tui --live 192.168.1.50
 
-# Live telemetry + record raw packets for verification
+# Live telemetry + record all UDP communication for verification
 python -m gt7tui --live 192.168.1.50 --record captures/race.gt7cap
 
 # Replay a recorded capture
@@ -65,7 +65,7 @@ python -m gt7tui --demo
 ```
 
 Options:
-- `--record <file>` record raw UDP packets in live mode
+- `--record <file>` record all UDP communication in live mode (received telemetry + sent heartbeats)
 - `--speed <factor>` replay speed multiplier (default `1.0`)
 - `--bind <addr>` (default `0.0.0.0`)
 - `--recv-port <port>` (default `33740`)
