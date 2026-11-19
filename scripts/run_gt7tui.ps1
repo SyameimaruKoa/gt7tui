@@ -3,15 +3,24 @@
 Launch gt7tui (visual TUI frontend for Gran Turismo 7 telemetry on PS4).
 
 .DESCRIPTION
-run_gt7tui.ps1 starts gt7tui in live mode (--live <PS4_IP>) or demo mode (--demo).
+run_gt7tui.ps1 starts gt7tui in live/replay/demo mode.
 If no arguments are provided, or -h/--help/Help is requested, this help is shown.
 The script passes supported options to: python -m gt7tui
 
 .PARAMETER Live
 PS4 IP address for live telemetry mode.
 
+.PARAMETER Replay
+Capture file path for replay mode.
+
 .PARAMETER Demo
 Run demo mode with continuously varying mock telemetry.
+
+.PARAMETER Record
+Record raw UDP packets to file (live mode only).
+
+.PARAMETER Speed
+Replay speed multiplier (default: 1.0).
 
 .PARAMETER Bind
 UDP bind address (default: 0.0.0.0).
@@ -32,13 +41,13 @@ UI refresh rate upper bound in Hz (default: 20.0).
 Show gt7tui version.
 
 .EXAMPLE
-./scripts/run_gt7tui.ps1 -Live 192.168.1.50
+./scripts/run_gt7tui.ps1 -Live 192.168.1.50 -Record captures/race.gt7cap
+
+.EXAMPLE
+./scripts/run_gt7tui.ps1 -Replay captures/race.gt7cap -Speed 2.0
 
 .EXAMPLE
 ./scripts/run_gt7tui.ps1 -Demo
-
-.EXAMPLE
-Get-Help ./scripts/run_gt7tui.ps1 -Detailed
 #>
 
 #region Parameters
@@ -48,7 +57,16 @@ param(
     [string]$Live,
 
     [Parameter(Mandatory = $false)]
+    [string]$Replay,
+
+    [Parameter(Mandatory = $false)]
     [switch]$Demo,
+
+    [Parameter(Mandatory = $false)]
+    [string]$Record,
+
+    [Parameter(Mandatory = $false)]
+    [double]$Speed,
 
     [Parameter(Mandatory = $false)]
     [string]$Bind,
@@ -79,16 +97,20 @@ function Show-Help {
 run_gt7tui.ps1 - Launch gt7tui (visual TUI frontend for Gran Turismo 7 telemetry on PS4)
 
 USAGE:
-    .\scripts\run_gt7tui.ps1 -Live <PS4_IP> [options]
+    .\scripts\run_gt7tui.ps1 -Live <PS4_IP> [-Record <file>] [options]
+    .\scripts\run_gt7tui.ps1 -Replay <file> [-Speed <factor>] [options]
     .\scripts\run_gt7tui.ps1 -Demo [options]
     .\scripts\run_gt7tui.ps1 -h|--help
     Get-Help .\scripts\run_gt7tui.ps1 -Detailed
 
 MODES (exclusive):
     -Live <PS4_IP>    Connect to PS4 GT7 telemetry at the specified IP address
+    -Replay <file>    Replay a recorded capture file
     -Demo             Run demo mode with continuously varying mock telemetry
 
 OPTIONS:
+    -Record <file>      Record raw UDP packets to file (live mode only)
+    -Speed <factor>     Replay speed multiplier (default: 1.0)
     -Bind <addr>        UDP bind address (default: 0.0.0.0)
     -RecvPort <port>    UDP receive port (default: 33740)
     -SendPort <port>    UDP heartbeat destination port (default: 33739)
@@ -123,8 +145,17 @@ foreach ($a in $allArgs) {
     }
 }
 
-if ($PSBoundParameters.ContainsKey('Live') -and $Demo) {
-    Write-Host 'Error: -Live and -Demo are exclusive.' -ForegroundColor Red
+$modeCount = 0
+if ($PSBoundParameters.ContainsKey('Live') -and $Live) { $modeCount++ }
+if ($PSBoundParameters.ContainsKey('Replay') -and $Replay) { $modeCount++ }
+if ($Demo) { $modeCount++ }
+if ($modeCount -gt 1) {
+    Write-Host 'Error: -Live, -Replay, and -Demo are exclusive.' -ForegroundColor Red
+    Show-Help
+    exit 2
+}
+if ($PSBoundParameters.ContainsKey('Record') -and $Record -and -not ($PSBoundParameters.ContainsKey('Live') -and $Live)) {
+    Write-Host 'Error: -Record can only be used with -Live.' -ForegroundColor Red
     Show-Help
     exit 2
 }
@@ -147,6 +178,9 @@ $cmdArgs = @()
 if ($Version) { $cmdArgs += '--version' }
 if ($Demo) { $cmdArgs += '--demo' }
 if ($PSBoundParameters.ContainsKey('Live') -and $Live) { $cmdArgs += @('--live', $Live) }
+if ($PSBoundParameters.ContainsKey('Replay') -and $Replay) { $cmdArgs += @('--replay', $Replay) }
+if ($PSBoundParameters.ContainsKey('Record') -and $Record) { $cmdArgs += @('--record', $Record) }
+if ($PSBoundParameters.ContainsKey('Speed')) { $cmdArgs += @('--speed', "$Speed") }
 if ($PSBoundParameters.ContainsKey('Bind') -and $Bind) { $cmdArgs += @('--bind', $Bind) }
 if ($PSBoundParameters.ContainsKey('RecvPort')) { $cmdArgs += @('--recv-port', "$RecvPort") }
 if ($PSBoundParameters.ContainsKey('SendPort')) { $cmdArgs += @('--send-port', "$SendPort") }

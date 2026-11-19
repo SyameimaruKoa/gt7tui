@@ -116,6 +116,9 @@ class AppConfig:
     thresholds: dict[str, Any] = field(default_factory=dict)
     colors: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict)
+    record_path: str | None = None
+    replay_path: str | None = None
+    replay_speed: float = 1.0
 
 
 def load_file_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
@@ -146,13 +149,13 @@ def build_config(file_cfg: dict[str, Any] | None = None, cli: dict[str, Any] | N
                 cli_net[k] = v
             elif k in ("refresh_hz", "layout"):
                 cli_ui[k] = v
-            elif k in ("mode", "ps_ip"):
+            elif k in ("mode", "ps_ip", "record_path", "replay_path", "replay_speed"):
                 merged[k] = v
         if cli_net:
             merged = _deep_merge(merged, {"network": cli_net})
         if cli_ui:
             merged = _deep_merge(merged, {"ui": cli_ui})
-        for k in ("mode", "ps_ip"):
+        for k in ("mode", "ps_ip", "record_path", "replay_path", "replay_speed"):
             if k in cli and cli[k] is not None:
                 merged[k] = cli[k]
 
@@ -172,4 +175,7 @@ def build_config(file_cfg: dict[str, Any] | None = None, cli: dict[str, Any] | N
         thresholds=dict(merged.get("thresholds", {})),
         colors=dict(merged.get("colors", {})),
         raw=merged,
+        record_path=merged.get("record_path"),
+        replay_path=merged.get("replay_path"),
+        replay_speed=float(merged.get("replay_speed", 1.0)),
     )

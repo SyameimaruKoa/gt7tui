@@ -8,6 +8,7 @@ from textual.widgets import Footer, Header, Static, TabbedContent, TabPane
 from ..config import AppConfig
 from ..core.demo import DemoSource
 from ..core.receiver import LiveReceiver
+from ..core.replay import ReplaySource
 from ..core.state import StateStore
 from .widgets.dashboard import DashboardPane
 from .widgets.detail import DetailPane
@@ -63,6 +64,7 @@ class GT7App(App):
         self.store = StateStore()
         self.receiver: LiveReceiver | None = None
         self.demo: DemoSource | None = None
+        self.replay: ReplaySource | None = None
         self.status_bar: StatusBar | None = None
         self.dashboard: DashboardPane | None = None
         self.tyres: TyresPane | None = None
@@ -90,7 +92,10 @@ class GT7App(App):
 
     def on_mount(self) -> None:
         self.title = "gt7tui"
-        self.sub_title = f"mode={self.config.mode}"
+        sub = f"mode={self.config.mode}"
+        if self.config.record_path:
+            sub += f" rec={self.config.record_path}"
+        self.sub_title = sub
         self._start_source()
         hz = max(1.0, float(self.config.refresh_hz))
         self.set_interval(1.0 / hz, self._tick)
@@ -100,6 +105,12 @@ class GT7App(App):
         if self.config.mode == "demo":
             self.demo = DemoSource(self.store, refresh_hz=self.config.refresh_hz)
             self.demo.start()
+        elif self.config.mode == "replay":
+            if not self.config.replay_path:
+                self.store.mark_waiting("missing replay file")
+                return
+            self.replay = ReplaySource(self.config.replay_path, self.store, speed=self.config.replay_speed)
+            self.replay.start()
         else:
             if not self.config.ps_ip:
                 self.store.mark_waiting("missing PS4 IP")
@@ -112,6 +123,7 @@ class GT7App(App):
                 timeout=self.config.timeout,
                 heartbeat_interval_packets=self.config.heartbeat_interval_packets,
                 store=self.store,
+                record_path=self.config.record_path,
             )
             self.receiver.start()
 
@@ -122,6 +134,9 @@ class GT7App(App):
         if self.demo:
             self.demo.stop()
             self.demo = None
+        if self.replay:
+            self.replay.stop()
+            self.replay = None
 
     def _tick(self) -> None:
         snap = self.store.snapshot()
@@ -161,7 +176,7 @@ class GT7App(App):
         if self._help_visible:
             self._help_widget.update(
                 "[b]Keys[/b]  q: quit  r: reconnect(live)  1/2/3: tabs  ?: help\n"
-                "[b]Modes[/b] --live <PS4_IP>  --demo\n"
+                "[b]Modes[/b] --live <PS4_IP> [--record file]  --replay <file> [--speed N]  --demo\n"
                 "[b]Config[/b] ./gt7tui.json (fixed path, optional)\n"
                 "[b]Ports[/b] recv 33740 / send 33739 (defaults)"
             )

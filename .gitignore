@@ -12,3 +12,5 @@ gt7telemetry/
 *.swp
 *.swo
 .DS_Store
+*.gt7cap
+captures/

@@ -8,15 +8,19 @@ show_help() {
 run_gt7tui.sh - Launch gt7tui (visual TUI frontend for Gran Turismo 7 telemetry on PS4)
 
 USAGE:
-    ./scripts/run_gt7tui.sh --live <PS4_IP> [options]
+    ./scripts/run_gt7tui.sh --live <PS4_IP> [--record <file>] [options]
+    ./scripts/run_gt7tui.sh --replay <file> [--speed <factor>] [options]
     ./scripts/run_gt7tui.sh --demo [options]
     ./scripts/run_gt7tui.sh -h|--help
 
 MODES (exclusive):
     --live <PS4_IP>   Connect to PS4 GT7 telemetry at the specified IP address
+    --replay <file>   Replay a recorded capture file
     --demo            Run demo mode with continuously varying mock telemetry
 
 OPTIONS (passed to gt7tui):
+    --record <file>       Record raw UDP packets to file (live mode only)
+    --speed <factor>      Replay speed multiplier (default: 1.0)
     --bind <addr>         UDP bind address (default: 0.0.0.0)
     --recv-port <port>    UDP receive port (default: 33740)
     --send-port <port>    UDP heartbeat destination port (default: 33739)
