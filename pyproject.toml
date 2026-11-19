@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gt7tui"
+version = "0.1.0"
+description = "Visual TUI frontend for Gran Turismo 7 telemetry (PS4)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "GPL-3.0-or-later"}
+dependencies = [
+    "pycryptodome>=3.19.0",
+    "textual>=0.70.0",
+]
+
+[project.scripts]
+gt7tui = "gt7tui.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["gt7tui*"]
