@@ -33,7 +33,7 @@ class StateStore:
         self._lock = threading.Lock()
         self._state = RuntimeState()
 
-    def update_frame(self, frame: TelemetryFrame) -> None:
+    def update_frame(self, frame: TelemetryFrame, current_lap_time_s: float | None = None) -> None:
         now = time.time()
         mono = time.monotonic()
         with self._lock:
@@ -50,9 +50,12 @@ class StateStore:
                 if frame.current_lap != st.current_lap_seen:
                     st.current_lap_seen = frame.current_lap
                     st.current_lap_start_mono = mono
-                    st.current_lap_time_s = 0.0
+                    st.current_lap_time_s = max(0.0, float(current_lap_time_s or 0.0))
                 else:
-                    st.current_lap_time_s = max(0.0, mono - st.current_lap_start_mono)
+                    if current_lap_time_s is not None:
+                        st.current_lap_time_s = max(0.0, float(current_lap_time_s))
+                    else:
+                        st.current_lap_time_s = max(0.0, mono - st.current_lap_start_mono)
             else:
                 st.current_lap_seen = frame.current_lap
                 st.current_lap_start_mono = 0.0

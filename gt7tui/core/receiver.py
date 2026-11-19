@@ -111,9 +111,20 @@ class LiveReceiver:
                             self.store.mark_dropped()
                             continue
                         frame = decode_packet(ddata)
-                        if frame.packet_id <= last_pkt_id and last_pkt_id >= 0:
+                        if frame.packet_id < 0:
                             self.store.mark_dropped()
                             continue
+                        if last_pkt_id >= 0:
+                            if frame.packet_id == last_pkt_id:
+                                # duplicate retransmit: ignore silently
+                                continue
+                            if frame.packet_id < last_pkt_id:
+                                # likely reset/out-of-order old packet; treat as drop unless large wrap/reset
+                                if frame.packet_id < last_pkt_id - 1000:
+                                    last_pkt_id = -1
+                                else:
+                                    self.store.mark_dropped()
+                                    continue
                         last_pkt_id = frame.packet_id
                         self.store.update_frame(frame)
                 except Exception as e:

@@ -36,14 +36,10 @@ def _clamp01(x: float) -> float:
 
 
 def _temp_gauge(temp: float, cfg: AppConfig, width: int = 18) -> Text:
-    # Analog thermometer strip: 40..120 C
-    lo, hi = 40.0, 120.0
-    ratio = _clamp01((temp - lo) / (hi - lo))
-    th = cfg.thresholds.get("tyre_temp", {})
-    cold = float(th.get("cold", 60.0))
-    opt_min = float(th.get("optimal_min", 80.0))
-    opt_max = float(th.get("optimal_max", 100.0))
-    hot = float(th.get("hot", 110.0))
+    # Analog thermometer strip: dynamic upper bound for extreme temps (spin/pit events)
+    lo = 40.0
+    hi = max(120.0, min(220.0, math.ceil(max(temp, 120.0) / 10.0) * 10.0))
+    ratio = _clamp01((temp - lo) / (hi - lo)) if hi > lo else 0.0
 
     def zone_style(v: float) -> str:
         return _temp_style(v, cfg)
@@ -60,7 +56,7 @@ def _temp_gauge(temp: float, cfg: AppConfig, width: int = 18) -> Text:
             t.append("━", style=st)
         else:
             t.append("─", style="grey23")
-    t.append(" 120°", style="grey50")
+    t.append(f" {int(hi):>3}°", style="grey50")
     return t
 
 
@@ -80,9 +76,10 @@ def _slip_meter(slip: float | None, cfg: AppConfig, width: int = 17) -> Text:
     else:
         style = colors.get("normal", "green")
 
-    # map 0.80 .. 1.40 to width
+    # map 0.80 .. 1.40 to width (values above are capped to indicate extreme spin/slip)
     lo, hi = 0.80, 1.40
-    ratio = _clamp01((slip - lo) / (hi - lo))
+    disp = max(0.0, min(slip, 2.0))
+    ratio = _clamp01((disp - lo) / (hi - lo))
     center = _clamp01((1.00 - lo) / (hi - lo))
     pos = int(round(ratio * (width - 1)))
     cpos = int(round(center * (width - 1)))
@@ -98,7 +95,8 @@ def _slip_meter(slip: float | None, cfg: AppConfig, width: int = 17) -> Text:
         else:
             t.append("·", style="grey30")
     t.append("]", style="grey50")
-    t.append(f" {slip:4.2f}", style=style)
+    label = f"{slip:4.2f}" if slip < 10.0 else "HIGH!"
+    t.append(f" {label}", style=style)
     return t
 
 

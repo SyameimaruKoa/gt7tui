@@ -34,6 +34,8 @@ class ReplaySource:
     def _run(self) -> None:
         self.store.set_source("replay")
         last_pkt_id = -1
+        lap_seen = -1
+        lap_start_ts = 0.0
         try:
             while not self._stop.is_set():
                 reader = CaptureReader(self.path)
@@ -69,11 +71,28 @@ class ReplaySource:
                         # allow reset if capture loops naturally
                         if frame.packet_id < last_pkt_id - 1000:
                             last_pkt_id = -1
+                            lap_seen = -1
+                            lap_start_ts = ts
+                        elif frame.packet_id == last_pkt_id:
+                            # duplicate retransmit: ignore silently
+                            continue
                         else:
                             self.store.mark_dropped()
                             continue
                     last_pkt_id = frame.packet_id
-                    self.store.update_frame(frame)
+
+                    # lap time in capture/replay timeline (stable across --speed)
+                    if frame.current_lap > 0:
+                        if frame.current_lap != lap_seen:
+                            lap_seen = frame.current_lap
+                            lap_start_ts = ts
+                        lap_time_s = max(0.0, ts - lap_start_ts)
+                    else:
+                        lap_seen = frame.current_lap
+                        lap_start_ts = ts
+                        lap_time_s = 0.0
+
+                    self.store.update_frame(frame, current_lap_time_s=lap_time_s)
                 if not any_record:
                     self.store.mark_waiting("replay: empty capture")
                     return
@@ -82,5 +101,7 @@ class ReplaySource:
                     self.store.mark_waiting("replay finished")
                     return
                 last_pkt_id = -1
+                lap_seen = -1
+                lap_start_ts = 0.0
         except Exception as e:
             self.store.mark_waiting(f"replay error: {e}")

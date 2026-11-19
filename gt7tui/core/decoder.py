@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import struct
 from dataclasses import dataclass, field
 from typing import Optional
@@ -23,6 +24,12 @@ def _H(data: bytes, off: int) -> int:
 
 def _B(data: bytes, off: int) -> int:
     return struct.unpack("B", data[off : off + 1])[0]
+
+
+def _safe_float(v: float, default: float = 0.0) -> float:
+    if not math.isfinite(v):
+        return default
+    return float(v)
 
 
 @dataclass
@@ -118,59 +125,66 @@ def decode_packet(d: bytes) -> TelemetryFrame:
 
     frame.throttle = _B(d, 0x91) / 2.55
     frame.brake = _B(d, 0x92) / 2.55
-    frame.rpm = _f(d, 0x3C)
-    frame.speed_kph = 3.6 * _f(d, 0x4C)
+    frame.rpm = _safe_float(_f(d, 0x3C))
+    frame.speed_kph = _safe_float(3.6 * _f(d, 0x4C))
     frame.rev_warning = _H(d, 0x88)
     frame.rev_limiter = _H(d, 0x8A)
     frame.est_top_speed = _h(d, 0x8C)
 
-    frame.fuel_or_charge = _f(d, 0x44)
-    frame.fuel_capacity = _f(d, 0x48)
+    frame.fuel_or_charge = _safe_float(_f(d, 0x44))
+    frame.fuel_capacity = _safe_float(_f(d, 0x48))
     frame.is_ev = frame.fuel_capacity <= 0
 
     boost_raw = _f(d, 0x50)
-    frame.boost_kpa = boost_raw - 1.0
+    frame.boost_kpa = _safe_float(boost_raw - 1.0)
     frame.has_turbo = frame.boost_kpa > -1.0
 
-    frame.clutch = _f(d, 0xF4)
-    frame.clutch_engaged = _f(d, 0xF8)
-    frame.rpm_after_clutch = _f(d, 0xFC)
+    frame.clutch = _safe_float(_f(d, 0xF4))
+    frame.clutch_engaged = _safe_float(_f(d, 0xF8))
+    frame.rpm_after_clutch = _safe_float(_f(d, 0xFC))
 
-    frame.oil_temp_c = _f(d, 0x5C)
-    frame.water_temp_c = _f(d, 0x58)
-    frame.oil_pressure_bar = _f(d, 0x54)
-    frame.ride_height_mm = 1000.0 * _f(d, 0x38)
+    frame.oil_temp_c = _safe_float(_f(d, 0x5C))
+    frame.water_temp_c = _safe_float(_f(d, 0x58))
+    frame.oil_pressure_bar = _safe_float(_f(d, 0x54))
+    frame.ride_height_mm = _safe_float(1000.0 * _f(d, 0x38))
 
     # Tyres: FL FR RL RR
     diam = {
-        "FL": _f(d, 0xB4),
-        "FR": _f(d, 0xB8),
-        "RL": _f(d, 0xBC),
-        "RR": _f(d, 0xC0),
+        "FL": _safe_float(_f(d, 0xB4)),
+        "FR": _safe_float(_f(d, 0xB8)),
+        "RL": _safe_float(_f(d, 0xBC)),
+        "RR": _safe_float(_f(d, 0xC0)),
     }
     ang = {
-        "FL": _f(d, 0xA4),
-        "FR": _f(d, 0xA8),
-        "RL": _f(d, 0xAC),
-        "RR": _f(d, 0xB0),
+        "FL": _safe_float(_f(d, 0xA4)),
+        "FR": _safe_float(_f(d, 0xA8)),
+        "RL": _safe_float(_f(d, 0xAC)),
+        "RR": _safe_float(_f(d, 0xB0)),
     }
     temp = {
-        "FL": _f(d, 0x60),
-        "FR": _f(d, 0x64),
-        "RL": _f(d, 0x68),
-        "RR": _f(d, 0x6C),
+        "FL": _safe_float(_f(d, 0x60)),
+        "FR": _safe_float(_f(d, 0x64)),
+        "RL": _safe_float(_f(d, 0x68)),
+        "RR": _safe_float(_f(d, 0x6C)),
     }
     susp = {
-        "FL": _f(d, 0xC4),
-        "FR": _f(d, 0xC8),
-        "RL": _f(d, 0xCC),
-        "RR": _f(d, 0xD0),
+        "FL": _safe_float(_f(d, 0xC4)),
+        "FR": _safe_float(_f(d, 0xC8)),
+        "RL": _safe_float(_f(d, 0xCC)),
+        "RR": _safe_float(_f(d, 0xD0)),
     }
     for key in ("FL", "FR", "RL", "RR"):
         tyre_speed = abs(3.6 * diam[key] * ang[key])
+        if not math.isfinite(tyre_speed):
+            tyre_speed = 0.0
         slip = None
-        if frame.speed_kph > 0:
-            slip = tyre_speed / frame.speed_kph
+        # Avoid division blow-up at standstill / very low speed and during stops/pit/spin transitions.
+        if frame.speed_kph >= 2.0 and math.isfinite(frame.speed_kph):
+            denom = max(frame.speed_kph, 1e-3)
+            slip_val = tyre_speed / denom
+            if math.isfinite(slip_val):
+                # Cap extreme values (burnout/spin/telemetry noise) for stable display.
+                slip = max(0.0, min(20.0, slip_val))
         frame.tyres[key] = TyreWheel(
             temp_c=temp[key],
             diameter_m=diam[key],
@@ -180,27 +194,27 @@ def decode_packet(d: bytes) -> TelemetryFrame:
         )
 
     frame.gear_ratios = [
-        _f(d, 0x104),
-        _f(d, 0x108),
-        _f(d, 0x10C),
-        _f(d, 0x110),
-        _f(d, 0x114),
-        _f(d, 0x118),
-        _f(d, 0x11C),
-        _f(d, 0x120),
+        _safe_float(_f(d, 0x104)),
+        _safe_float(_f(d, 0x108)),
+        _safe_float(_f(d, 0x10C)),
+        _safe_float(_f(d, 0x110)),
+        _safe_float(_f(d, 0x114)),
+        _safe_float(_f(d, 0x118)),
+        _safe_float(_f(d, 0x11C)),
+        _safe_float(_f(d, 0x120)),
     ]
-    frame.gear_ratio_unknown = _f(d, 0x100)
+    frame.gear_ratio_unknown = _safe_float(_f(d, 0x100))
 
-    frame.position_xyz = Vector3(_f(d, 0x04), _f(d, 0x08), _f(d, 0x0C))
-    frame.velocity_xyz = Vector3(_f(d, 0x10), _f(d, 0x14), _f(d, 0x18))
-    frame.rotation_pyr = Vector3(_f(d, 0x1C), _f(d, 0x20), _f(d, 0x24))
-    frame.north_south = _f(d, 0x28)
-    frame.angular_velocity_xyz = Vector3(_f(d, 0x2C), _f(d, 0x30), _f(d, 0x34))
+    frame.position_xyz = Vector3(_safe_float(_f(d, 0x04)), _safe_float(_f(d, 0x08)), _safe_float(_f(d, 0x0C)))
+    frame.velocity_xyz = Vector3(_safe_float(_f(d, 0x10)), _safe_float(_f(d, 0x14)), _safe_float(_f(d, 0x18)))
+    frame.rotation_pyr = Vector3(_safe_float(_f(d, 0x1C)), _safe_float(_f(d, 0x20)), _safe_float(_f(d, 0x24)))
+    frame.north_south = _safe_float(_f(d, 0x28))
+    frame.angular_velocity_xyz = Vector3(_safe_float(_f(d, 0x2C)), _safe_float(_f(d, 0x30)), _safe_float(_f(d, 0x34)))
 
     frame.flags_8e = _B(d, 0x8E)
     frame.flags_8f = _B(d, 0x8F)
     frame.flags_93 = _B(d, 0x93)
     for off in (0x94, 0x98, 0x9C, 0xA0, 0xD4, 0xD8, 0xDC, 0xE0, 0xE4, 0xE8, 0xEC, 0xF0):
-        frame.unknown_floats[f"0x{off:02X}"] = _f(d, off)
+        frame.unknown_floats[f"0x{off:02X}"] = _safe_float(_f(d, off))
 
     return frame

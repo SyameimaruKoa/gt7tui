@@ -313,13 +313,17 @@ class LapBlock(Static):
             table.add_row("Last:    --:--.---")
             table.add_row("Delta:   --")
             return Panel(table, title="Lap / Timing", border_style="green")
-        table.add_row(f"Lap: {frame.current_lap}/{frame.total_laps}  Pos: {frame.position}/{frame.total_positions}")
-        cur = snap.current_lap_time_s
-        table.add_row(f"Current: {_fmt_lap_s(cur)}")
+        lap_cur = str(frame.current_lap) if frame.current_lap >= 0 else "--"
+        lap_tot = str(frame.total_laps) if frame.total_laps >= 0 else "--"
+        pos_cur = str(frame.position) if frame.position >= 0 else "--"
+        pos_tot = str(frame.total_positions) if frame.total_positions >= 0 else "--"
+        table.add_row(f"Lap: {lap_cur}/{lap_tot}  Pos: {pos_cur}/{pos_tot}")
+        cur = snap.current_lap_time_s if frame.current_lap > 0 else 0.0
+        table.add_row(f"Current: {_fmt_lap_s(cur) if frame.current_lap > 0 else '--:--.---'}")
         table.add_row(f"Best:    {_fmt_lap(frame.best_lap_ms)}")
         table.add_row(f"Last:    {_fmt_lap(frame.last_lap_ms)}")
         delta_text = Text("Delta:   --")
-        if frame.best_lap_ms > 0 and cur > 0:
+        if frame.best_lap_ms > 0 and cur > 0 and frame.current_lap > 0:
             delta = cur - (frame.best_lap_ms / 1000.0)
             colors = cfg.colors.get("delta", {})
             style = colors.get("neutral", "white")
