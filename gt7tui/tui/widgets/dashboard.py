@@ -13,7 +13,7 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Static
 
 from ...config import AppConfig
-from ...core.decoder import TelemetryFrame, TyreWheel, induction_state, gear_ratio_valid, wheel_drive_state, drivetrain_layout, tyre_roles, has_energy_recovery, flag_names, FLAG8E_BITS, FLAG8F_BITS
+from ...core.decoder import TelemetryFrame, TyreWheel, induction_state, gear_ratio_valid, wheel_drive_state, drivetrain_layout, tyre_roles, flag_names, FLAG8E_BITS, FLAG8F_BITS
 from ...core.state import RuntimeState
 
 
@@ -468,10 +468,6 @@ class VehicleBlock(Static):
         # temps & pressure as analog bars
         g.add_row(_mini_gauge("OIL P", frame.oil_pressure_bar, 10.0, "b", "yellow3", width=14 if compact else 18))
         g.add_row(Text(f"RH {frame.ride_height_mm:5.0f} mm", style="grey70"))
-        if frame.packet_expansion != "none":
-            g.add_row(Text(f"EXT {frame.packet_expansion}  carType {frame.car_type}  ERec {frame.energy_recovery or 0:.2f}", style="grey50"))
-            if has_energy_recovery(frame):
-                g.add_row(Text(f"  Energy recovery  {frame.energy_recovery or 0:.2f}", style="bright_green"))
         return _panel(g, title="Vehicle", border_style="yellow")
 
 
@@ -492,14 +488,6 @@ class SessionBlock(Static):
             g.add_row(Text.assemble(("FLG ", "grey70"), (f8e, "bold yellow")))
             if f8f != "-":
                 g.add_row(Text.assemble(("     ", ""), (f8f, "yellow")))
-        # Extended car info
-        if frame.packet_expansion != "none":
-            bits = [f"type={frame.car_type}"]
-            if frame.energy_recovery_flag is not None:
-                bits.append(f"ER={frame.energy_recovery_flag}")
-            g.add_row(Text.assemble(("EXT ", "grey70"), (" ".join(bits), "cyan")))
-            if frame.engine_output is not None:
-                g.add_row(Text.assemble(("ENG ", "grey70"), (f"{frame.engine_output:+.2f}", "bright_cyan")))
         return _panel(g, title="Session", border_style="blue")
 
 
@@ -624,68 +612,103 @@ class TyreSummaryBlock(Static):
 
 
 class GSensorBlock(Static):
-    """Vehicle motion from extended fields (sway/heave/surge) + derived G.
+    """2D G map (lateral x longitudinal) + vertical 1D bar.
 
-    sway/heave/surge (0x130/0x134/0x138) are the car's own motion values from
-    GT7 (undocumented but stable in live data). They are shown alongside the
-    velocity-derived G for comparison.
+    Uses GT7's sway/heave/surge motion values (0x130/134/138) when available,
+    falling back to velocity-derived G. The 2D map shows a dot that moves around
+    a fixed crosshair, which is far easier to read at a glance than 3 bars.
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._peak_sway = 0.0
-        self._peak_surge = 0.0
+        self._peak_lat = 0.0
+        self._peak_lng = 0.0
 
-    def render_block(self, snap: RuntimeState, cfg: AppConfig):
+    def render_block(self, snap: RuntimeState, cfg: AppConfig, compact: bool = False):
         frame = snap.frame
-        sway = frame.sway if frame else None
-        heave = frame.heave if frame else None
-        surge = frame.surge if frame else None
-        # derived G from velocity delta (kept for reference)
-        lat = snap.g_lateral
-        lng = snap.g_longitudinal
-        vert = snap.g_vertical
-
-        def plane(label: str, value: float | None, peak: float, lim: float, pos_label: str, neg_label: str) -> Text:
-            if value is None:
-                return Text(f"{label:<6}[-----------------] --", style="grey50")
-            ratio = max(-1.0, min(1.0, value / lim))
-            w = 17
-            mid = w // 2
-            pos = mid + int(round(ratio * (mid - 1)))
-            pos = max(0, min(w - 1, pos))
-            t = Text()
-            t.append(f"{label:<5}")
-            t.append("[", style="grey50")
-            for i in range(w):
-                if i == pos:
-                    t.append("●", style="bold bright_yellow")
-                elif i == mid:
-                    t.append("┼", style="white")
-                elif (mid < i <= pos) or (pos <= i < mid):
-                    t.append("━", style="bright_yellow")
-                else:
-                    t.append("·", style="grey30")
-            t.append("]", style="grey50")
-            t.append(f" {value:+7.2f}", style="bright_yellow")
-            t.append(f" pk{peak:5.1f}", style="grey70")
-            return t
-
-        g = Table.grid(padding=(0, 0))
-        if sway is not None:
-            self._peak_sway = max(self._peak_sway, abs(sway))
-            self._peak_surge = max(self._peak_surge, abs(surge or 0))
-            g.add_row(Text("raw motion (0x130-138)", style="grey50"))
-            g.add_row(plane("SWAY", sway, self._peak_sway, 40.0, "R", "L"))
-            g.add_row(plane("HEAV", heave, 0.0, 40.0, "UP", "DN"))
-            g.add_row(plane("SRGE", surge, self._peak_surge, 40.0, "ACC", "BRK"))
-            g.add_row(Text(f"derived G  lat{lat:+.2f} lng{lng:+.2f} v{vert:+.2f}", style="grey50"))
+        if frame and frame.sway is not None:
+            x = frame.sway       # lateral (+ = right)
+            z = frame.surge or 0.0  # longitudinal (+ = accelerate)
+            y = frame.heave or 0.0  # vertical
+            lim_x, lim_z, lim_y = 40.0, 40.0, 40.0
+            source = "raw"
         else:
-            g.add_row(Text("no extended motion data", style="dim"))
-            g.add_row(plane("LAT", lat, 0.0, 2.0, "R", "L"))
-            g.add_row(plane("LNG", lng, 0.0, 2.0, "ACC", "BRK"))
-            g.add_row(Text(f"VERT {vert:+.2f}G", style="grey70"))
-        return _panel(g, title="G / Motion", border_style="bright_yellow")
+            x = snap.g_lateral
+            z = snap.g_longitudinal
+            y = snap.g_vertical
+            lim_x = lim_z = 2.0
+            lim_y = 2.0
+            source = "deriv"
+
+        if x is None or z is None:
+            return _panel(Text("No G data", style="dim"), title="G", border_style="bright_yellow")
+
+        self._peak_lat = max(self._peak_lat, abs(x))
+        self._peak_lng = max(self._peak_lng, abs(z))
+
+        # 2D map: rows = longitudinal (top=accelerate), cols = lateral (right=+)
+        rows = 9 if not compact else 7
+        cols = 27 if not compact else 19
+        grid = [["·" for _ in range(cols)] for _ in range(rows)]
+        cx = cols // 2
+        cz = rows // 2
+        # crosshair axes
+        for c in range(cols):
+            grid[cz][c] = "─"
+        for r in range(rows):
+            grid[r][cx] = "│"
+        grid[cz][cx] = "┼"
+        # corner ticks
+        grid[0][0] = "┌"; grid[0][cols-1] = "┐"
+        grid[rows-1][0] = "└"; grid[rows-1][cols-1] = "┘"
+        # plot dot
+        nx = max(-1.0, min(1.0, x / lim_x))
+        nz = max(-1.0, min(1.0, z / lim_z))
+        px = cx + int(round(nx * (cx - 1)))
+        pz = cz - int(round(nz * (cz - 1)))
+        px = max(0, min(cols - 1, px)); pz = max(0, min(rows - 1, pz))
+        grid[pz][px] = "●"
+
+        out = Text()
+        out.append(Text(f" {'ACC':>9} ", style="grey50"))
+        out.append("\n")
+        for r in range(rows):
+            out.append("  ")
+            for c in range(cols):
+                ch = grid[r][c]
+                st = "grey30"
+                if ch == "●":
+                    st = "bold bright_yellow"
+                elif ch in ("│", "─", "┼"):
+                    st = "grey50"
+                out.append(ch, style=st)
+            out.append("\n")
+        out.append(Text(f" {'BRK':>9}   L        R   x{x:+.1f} z{z:+.1f}", style="grey70"))
+
+        # vertical 1D bar
+        vert_ratio = max(-1.0, min(1.0, (y or 0.0) / lim_y))
+        vb = Text()
+        vb.append(" VERT ")
+        vb.append("[", style="grey50")
+        vw = 19
+        vmid = vw // 2
+        vpos = vmid + int(round(vert_ratio * (vmid - 1)))
+        vpos = max(0, min(vw - 1, vpos))
+        for i in range(vw):
+            if i == vpos:
+                vb.append("●", style="bold bright_cyan")
+            elif i == vmid:
+                vb.append("┼", style="white")
+            elif (vmid < i <= vpos) or (vpos <= i < vmid):
+                vb.append("━", style="bright_cyan")
+            else:
+                vb.append("·", style="grey30")
+        vb.append("]", style="grey50")
+        vb.append(f" {(y or 0.0):+.1f}", style="bright_cyan")
+        vb.append(f"  pk L{self._peak_lat:.0f} F{self._peak_lng:.0f}", style="grey50")
+        vb.append(f"  [{source}]", style="grey50")
+
+        return _panel(Group(out, vb), title="G", border_style="bright_yellow")
 
 
 class LayoutStatsBlock(Static):
@@ -754,6 +777,11 @@ class HVBatteryBlock(Static):
         style = "bold bright_green" if er > 0.05 else ("bold bright_cyan" if er < -0.05 else "grey70")
         t.append(f" {label} {er:+.2f}", style=style)
         g = Table.grid(padding=(0, 0))
+        if frame.packet_expansion != "none":
+            bits = [f"type={frame.car_type}"]
+            if frame.energy_recovery_flag is not None:
+                bits.append(f"ERflg={frame.energy_recovery_flag}")
+            g.add_row(Text.assemble(("  ", ""), (f"car {' '.join(bits)}", "grey50")))
         g.add_row(t)
         g.add_row(Text("  REGEN <--|--> ASSIST (battery discharge)", style="grey50"))
         if frame.motor_outputs is not None:
