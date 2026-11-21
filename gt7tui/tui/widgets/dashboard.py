@@ -13,7 +13,7 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Static
 
 from ...config import AppConfig
-from ...core.decoder import TelemetryFrame, TyreWheel, induction_state, gear_ratio_valid, wheel_drive_state, drivetrain_layout, tyre_roles, has_energy_recovery
+from ...core.decoder import TelemetryFrame, TyreWheel, induction_state, gear_ratio_valid, wheel_drive_state, drivetrain_layout, tyre_roles, has_energy_recovery, flag_names, FLAG8E_BITS, FLAG8F_BITS
 from ...core.state import RuntimeState
 
 
@@ -485,6 +485,21 @@ class SessionBlock(Static):
         g.add_row(Text.assemble(("Lap ", "grey70"), (f"{max(0, frame.current_lap)}/{max(0, frame.total_laps)}", "white"), ("  Pos ", "grey70"), (f"{max(0, frame.position)}/{max(0, frame.total_positions)}", "white")))
         g.add_row(Text.assemble(("Time ", "grey70"), (f"{frame.time_on_track_ms/1000.0:,.1f}s", "white")))
         g.add_row(Text.assemble(("Best ", "grey70"), (_fmt_lap(frame.best_lap_ms), "green"), ("  Last ", "grey70"), (_fmt_lap(frame.last_lap_ms), "yellow")))
+        # Flags with names (user-verified bit meanings)
+        f8e = flag_names(frame.flags_8e, FLAG8E_BITS)
+        f8f = flag_names(frame.flags_8f, FLAG8F_BITS)
+        if f8e != "-" or f8f != "-":
+            g.add_row(Text.assemble(("FLG ", "grey70"), (f8e, "bold yellow")))
+            if f8f != "-":
+                g.add_row(Text.assemble(("     ", ""), (f8f, "yellow")))
+        # Extended car info
+        if frame.packet_expansion != "none":
+            bits = [f"type={frame.car_type}"]
+            if frame.energy_recovery_flag is not None:
+                bits.append(f"ER={frame.energy_recovery_flag}")
+            g.add_row(Text.assemble(("EXT ", "grey70"), (" ".join(bits), "cyan")))
+            if frame.engine_output is not None:
+                g.add_row(Text.assemble(("ENG ", "grey70"), (f"{frame.engine_output:+.2f}", "bright_cyan")))
         return _panel(g, title="Session", border_style="blue")
 
 
