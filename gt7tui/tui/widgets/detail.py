@@ -11,6 +11,7 @@ from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Static
 
+from ...core.decoder import induction_state, gear_ratio_valid
 from ...config import AppConfig
 from ...core.state import RuntimeState
 
@@ -105,6 +106,7 @@ class DetailPane(Container):
             st.add_row(Text.assemble(("Clutch engage: ", "grey70"), (f"{f.clutch_engaged:.3f}", "white"), ("  RPM after: ", "grey70"), (f"{f.rpm_after_clutch:.0f}", "white")))
             boost = f"{f.boost_kpa:.2f} kPa" if f.has_turbo else "N/A"
             st.add_row(Text.assemble(("Boost: ", "grey70"), (boost, "cyan" if f.has_turbo else "grey50"), ("   Speed: ", "grey70"), (f"{f.speed_kph:.1f} km/h", "bold bright_cyan"), ("   RPM: ", "grey70"), (f"{f.rpm:.0f}", "bold green")))
+            st.add_row(Text.assemble(("Induction: ", "grey70"), (induction_state(f), "bright_yellow"), ("  Gear ratios: ", "grey70"), ("N/A (special/CVT)" if not gear_ratio_valid(f) else "available", "cyan")))
         else:
             st.add_row(Text("No telemetry frame", style="dim"))
         self.session.update(_panel(st, title="Session / Vehicle", border_style="cyan"))

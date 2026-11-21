@@ -13,7 +13,7 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Static
 
 from ...config import AppConfig
-from ...core.decoder import TelemetryFrame, TyreWheel
+from ...core.decoder import TelemetryFrame, TyreWheel, induction_state, gear_ratio_valid
 from ...core.state import RuntimeState
 
 
@@ -314,9 +314,14 @@ class SpeedBlock(Static):
         if frame and frame.est_top_speed and frame.est_top_speed > 0:
             top = max(200.0, min(450.0, float(frame.est_top_speed) * 1.1))
         gauge = _linear_gauge(speed, top, width=20, color="bright_cyan", label=f"{speed:5.1f} km/h")
-        est = f" est.max {frame.est_top_speed} km/h" if frame and frame.est_top_speed else ""
-        info = Text(est, style="grey70")
-        return _panel(Group(gauge, info), title="Speedometer", border_style="bright_cyan")
+        lines = [gauge]
+        if frame and frame.est_top_speed and frame.est_top_speed > 0:
+            # bar showing speed vs estimated top speed
+            topv = float(frame.est_top_speed)
+            topg = _linear_gauge(speed, topv, width=20, color="bright_blue", label=f"{speed / topv * 100.0:3.0f}%")
+            lines.append(Text(f" of est.max {topv} km/h", style="grey70"))
+            lines.append(topg)
+        return _panel(Group(*lines), title="Speedometer", border_style="bright_cyan")
 
 
 class PedalsBlock(Static):

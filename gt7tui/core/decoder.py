@@ -263,3 +263,13 @@ def drivetrain_layout(frame: TelemetryFrame) -> str:
     if abs(diff) < 0.01:
         return "AWD"
     return "FWD" if diff > 0 else "RWD"
+
+
+def induction_state(frame: TelemetryFrame) -> str:
+    """Return 'BOOST' when actually making positive boost, else 'NA'."""
+    return "BOOST" if frame.boost_kpa > 5.0 else "NA"
+
+
+def gear_ratio_valid(frame: TelemetryFrame) -> bool:
+    """Some cars (CVT / special) send zero gear ratios."""
+    return sum(1 for r in frame.gear_ratios if r > 0) >= 2
