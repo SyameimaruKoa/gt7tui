@@ -276,7 +276,7 @@ class RpmBlock(Static):
         c_lim = colors.get("limit", "red")
 
         if not frame:
-            gauge = _linear_gauge(0, 8000, width=31, color=c_norm, label="0 rpm")
+            gauge = _linear_gauge(0, 8000, width=24, color=c_norm, label="0 rpm")
             info = Text(" shift ----   dial ----   scale 0-8000", style="grey70")
             return _panel(Group(gauge, info), title="Tachometer", border_style="cyan")
 
@@ -295,7 +295,7 @@ class RpmBlock(Static):
             scale_max = math.ceil(frame.rpm / 500.0) * 500.0
 
         gauge = _linear_gauge(
-            frame.rpm, scale_max, width=31,
+            frame.rpm, scale_max, width=24,
             color=c_norm, warn=shift if shift > 0 else None,
             limit=dial if dial > 0 and dial < scale_max else None,
             warn_color=c_warn, limit_color=c_lim,
@@ -313,7 +313,7 @@ class SpeedBlock(Static):
         top = 320.0
         if frame and frame.est_top_speed and frame.est_top_speed > 0:
             top = max(200.0, min(450.0, float(frame.est_top_speed) * 1.1))
-        gauge = _linear_gauge(speed, top, width=31, color="bright_cyan", label=f"{speed:5.1f} km/h")
+        gauge = _linear_gauge(speed, top, width=20, color="bright_cyan", label=f"{speed:5.1f} km/h")
         est = f" est.max {frame.est_top_speed} km/h" if frame and frame.est_top_speed else ""
         info = Text(est, style="grey70")
         return _panel(Group(gauge, info), title="Speedometer", border_style="bright_cyan")
@@ -446,8 +446,6 @@ class VehicleBlock(Static):
         g.add_row(_mini_gauge(label, pct, 100.0, "%", fuel_color, width=14 if compact else 18))
         g.add_row(Text(f"       {cur:5.1f}/{cap:5.1f} {unit}", style="grey70"))
         # temps & pressure as analog bars
-        g.add_row(_mini_gauge("OIL T", frame.oil_temp_c, 150.0, "°", "orange3", width=14 if compact else 18))
-        g.add_row(_mini_gauge("WATER", frame.water_temp_c, 130.0, "°", "dodger_blue2", width=14 if compact else 18))
         g.add_row(_mini_gauge("OIL P", frame.oil_pressure_bar, 10.0, "b", "yellow3", width=14 if compact else 18))
         g.add_row(Text(f"RH {frame.ride_height_mm:5.0f} mm", style="grey70"))
         return _panel(g, title="Vehicle", border_style="yellow")

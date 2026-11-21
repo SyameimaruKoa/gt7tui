@@ -98,8 +98,6 @@ class DetailPane(Container):
             st.add_row(Text.assemble(("Time: ", "grey70"), (f"{f.time_on_track_ms/1000.0:,.1f} s", "bold white"), ("   Est Vmax: ", "grey70"), (f"{f.est_top_speed} km/h", "bright_cyan")))
             st.add_row(Text.assemble(("RideH: ", "grey70"), (f"{f.ride_height_mm:5.1f} mm", "yellow")))
             # analog mini meters
-            st.add_row(_mag_meter("OilT", f.oil_temp_c, 150.0, "°", "orange3"))
-            st.add_row(_mag_meter("Watr", f.water_temp_c, 130.0, "°", "dodger_blue2"))
             st.add_row(_mag_meter("OilP", f.oil_pressure_bar, 10.0, "b", "yellow3"))
             st.add_row(_mag_meter("Thro", f.throttle, 100.0, "%", "green"))
             st.add_row(_mag_meter("Brak", f.brake, 100.0, "%", "red"))
@@ -169,6 +167,11 @@ class DetailPane(Container):
             dt.add_row(_center_meter("Y", f.angular_velocity_xyz.y, 5.0, "", color_pos="orange3", color_neg="purple"))
             dt.add_row(_center_meter("Z", f.angular_velocity_xyz.z, 5.0, "", color_pos="orange3", color_neg="purple"))
             dt.add_row(_center_meter("N/S", f.north_south, 1.0, "", color_pos="white", color_neg="grey50"))
+            dt.add_row(Text("Road plane normal", style="bold grey70"))
+            dt.add_row(_center_meter("X", f.road_plane_x, 1.0, "", color_pos="green", color_neg="red"))
+            dt.add_row(_center_meter("Y", f.road_plane_y, 1.0, "", color_pos="green", color_neg="red"))
+            dt.add_row(_center_meter("Z", f.road_plane_z, 1.0, "", color_pos="green", color_neg="red"))
+            dt.add_row(_mag_meter("Dist", f.road_plane_distance, 20.0, "m", "yellow3"))
         else:
             dt.add_row(Text("No data", style="dim"))
         self.dynamics.update(_panel(dt, title="Dynamics", border_style="green"))

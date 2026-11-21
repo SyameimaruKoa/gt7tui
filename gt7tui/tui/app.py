@@ -64,7 +64,11 @@ class GT7App(App):
         width: 100%;
         height: 3;
     }
-    DashboardPane RpmBlock, DashboardPane SpeedBlock, DashboardPane PedalsBlock, DashboardPane LapBlock, DashboardPane VehicleBlock, DashboardPane SessionBlock, DashboardPane DynamicsBlock {
+    DashboardPane RpmBlock, DashboardPane SpeedBlock {
+        height: auto;
+        width: 1fr;
+    }
+    DashboardPane PedalsBlock, DashboardPane LapBlock, DashboardPane VehicleBlock, DashboardPane BoostBlock, DashboardPane SessionBlock, DashboardPane TyreSummaryBlock {
         height: auto;
     }
     .compact DashboardPane .wide-only {

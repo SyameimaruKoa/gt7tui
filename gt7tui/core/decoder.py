@@ -96,6 +96,12 @@ class TelemetryFrame:
     angular_velocity_xyz: Vector3 = field(default_factory=Vector3)
     north_south: float = 0.0
 
+    # Road plane normal (0x94-0x9C) and distance from road (0xA0)
+    road_plane_x: float = 0.0
+    road_plane_y: float = 0.0
+    road_plane_z: float = 0.0
+    road_plane_distance: float = 0.0
+
     flags_8e: int = 0
     flags_8f: int = 0
     flags_93: int = 0
@@ -210,6 +216,10 @@ def decode_packet(d: bytes) -> TelemetryFrame:
     frame.velocity_xyz = Vector3(_safe_float(_f(d, 0x10)), _safe_float(_f(d, 0x14)), _safe_float(_f(d, 0x18)))
     frame.rotation_pyr = Vector3(_safe_float(_f(d, 0x1C)), _safe_float(_f(d, 0x20)), _safe_float(_f(d, 0x24)))
     frame.north_south = _safe_float(_f(d, 0x28))
+    frame.road_plane_x = _safe_float(_f(d, 0x94))
+    frame.road_plane_y = _safe_float(_f(d, 0x98))
+    frame.road_plane_z = _safe_float(_f(d, 0x9C))
+    frame.road_plane_distance = _safe_float(_f(d, 0xA0))
     frame.angular_velocity_xyz = Vector3(_safe_float(_f(d, 0x2C)), _safe_float(_f(d, 0x30)), _safe_float(_f(d, 0x34)))
 
     frame.flags_8e = _B(d, 0x8E)
