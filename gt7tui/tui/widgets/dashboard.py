@@ -669,6 +669,39 @@ class LayoutStatsBlock(Static):
         return _panel(g, title="Drive Layout", border_style="cyan")
 
 
+class HVBatteryBlock(Static):
+    """Hybrid energy flow: + assist (battery discharge), - regeneration (charge)."""
+
+    def render_block(self, frame: TelemetryFrame | None):
+        if not frame or frame.energy_recovery is None:
+            return _panel(Text("No HV data (needs ~ heartbeat)", style="dim"), title="HV Battery", border_style="green")
+        er = max(-1.0, min(1.0, frame.energy_recovery))
+        # center meter: left=regen(charge), right=assist(discharge)
+        w = 21
+        mid = w // 2
+        pos = mid + int(round(er * (mid - 1)))
+        pos = max(0, min(w - 1, pos))
+        t = Text()
+        t.append("[", style="grey50")
+        for i in range(w):
+            if i == pos:
+                t.append("●", style="bold bright_green" if er > 0 else "bold bright_cyan")
+            elif i == mid:
+                t.append("┼", style="white")
+            elif (mid < i <= pos) or (pos <= i < mid):
+                t.append("━", style="bright_green" if er > 0 else "bright_cyan")
+            else:
+                t.append("·", style="grey30")
+        t.append("]", style="grey50")
+        label = "ASSIST" if er > 0.05 else ("REGEN" if er < -0.05 else "idle")
+        style = "bold bright_green" if er > 0.05 else ("bold bright_cyan" if er < -0.05 else "grey70")
+        t.append(f" {label} {er:+.2f}", style=style)
+        g = Table.grid(padding=(0, 0))
+        g.add_row(t)
+        g.add_row(Text("  REGEN <--|--> ASSIST (battery discharge)", style="grey50"))
+        return _panel(g, title="HV Battery", border_style="green")
+
+
 class DashboardPane(Container):
     def __init__(self, config: AppConfig, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -683,6 +716,7 @@ class DashboardPane(Container):
         self.session_block = SessionBlock(classes="wide-only")
         self.tyre_summary = TyreSummaryBlock(classes="wide-only")
         self.boost_block = BoostBlock()
+        self.hv_battery = HVBatteryBlock()
         self.gsensor_block = GSensorBlock(classes="wide-only")
         self.layout_stats = LayoutStatsBlock(classes="wide-only")
 
@@ -704,6 +738,7 @@ class DashboardPane(Container):
                 yield self.pedals_block
                 yield self.vehicle_block
                 yield self.boost_block
+                yield self.hv_battery
                 yield self.gsensor_block
                 yield self.tyre_summary
 
@@ -730,5 +765,6 @@ class DashboardPane(Container):
         self.session_block.update(self.session_block.render_block(frame, snap, cfg))
         self.tyre_summary.update(self.tyre_summary.render_block(frame, snap, cfg))
         self.boost_block.update(self.boost_block.render_block(frame, cfg))
+        self.hv_battery.update(self.hv_battery.render_block(frame))
         self.gsensor_block.update(self.gsensor_block.render_block(snap, cfg))
         self.layout_stats.update(self.layout_stats.render_block(snap, cfg))
