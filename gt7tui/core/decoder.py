@@ -266,8 +266,12 @@ def drivetrain_layout(frame: TelemetryFrame) -> str:
 
 
 def induction_state(frame: TelemetryFrame) -> str:
-    """Return 'BOOST' when actually making positive boost, else 'NA'."""
-    return "BOOST" if frame.boost_kpa > 5.0 else "NA"
+    """Return induction type. Turbo flag is authoritative; show boost-on state separately."""
+    if not frame.has_turbo:
+        return "NA"
+    if frame.boost_kpa > 5.0:
+        return "TURBO+"
+    return "TURBO"
 
 
 def gear_ratio_valid(frame: TelemetryFrame) -> bool:
