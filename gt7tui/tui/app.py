@@ -65,9 +65,18 @@ class GT7App(App):
     DashboardPane PedalsBlock, DashboardPane LapBlock, DashboardPane VehicleBlock, DashboardPane BoostBlock, DashboardPane HVBatteryBlock, DashboardPane SessionBlock, DashboardPane TyreSummaryBlock, DashboardPane GSensorBlock, DashboardPane LayoutStatsBlock {
         height: auto;
     }
-    /* All panels are always visible. On narrow screens wrapping is preferred
-       over hiding information - empty space at the bottom is worse than wraps.
-       Gauges stay side-by-side (compact render geometry keeps them readable). */
+    /* Tiny screens (<80 cols): stack everything in one full-width column. */
+    .tiny DashboardPane > Horizontal {
+        layout: vertical;
+        height: auto;
+    }
+    .tiny DashboardPane > Horizontal > Vertical {
+        width: 100%;
+        height: auto;
+    }
+    .tiny DashboardPane RpmBlock, .tiny DashboardPane SpeedBlock {
+        width: 100%;
+    }
     DetailPane {
         layout: vertical;
     }
@@ -204,12 +213,15 @@ class GT7App(App):
     def _layout_mode(self) -> str:
         w = self.size.width
         h = self.size.height
+        if w < 80:
+            return "tiny"
         if w < 110 or h < 32:
             return "compact"
         return "wide"
 
     def _apply_layout_mode(self) -> str:
         mode = self._layout_mode()
+        self.screen.set_class(mode == "tiny", "tiny")
         self.screen.set_class(mode == "compact", "compact")
         self.screen.set_class(mode == "wide", "wide")
         return mode

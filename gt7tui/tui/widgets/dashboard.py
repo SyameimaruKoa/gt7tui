@@ -879,7 +879,7 @@ class DashboardPane(ScrollableContainer):
                 yield self.tyre_summary
 
     def update_view(self, snap: RuntimeState, cfg: AppConfig, layout: str = "wide") -> None:
-        compact = layout == "compact"
+        compact = layout in ("compact", "tiny")
         frame = snap.frame
         self.rpm_block.update(self.rpm_block.render_block(frame, snap, cfg, compact=compact))
         self.speed_block.update(self.speed_block.render_block(frame, cfg, compact=compact))
