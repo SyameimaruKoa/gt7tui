@@ -64,9 +64,8 @@ class GT7App(App):
     DashboardPane PedalsBlock, DashboardPane LapBlock, DashboardPane VehicleBlock, DashboardPane BoostBlock, DashboardPane HVBatteryBlock, DashboardPane SessionBlock, DashboardPane TyreSummaryBlock, DashboardPane GSensorBlock, DashboardPane LayoutStatsBlock {
         height: auto;
     }
-    .compact DashboardPane .wide-only {
-        display: none;
-    }
+    /* All panels are always visible. On narrow screens wrapping is preferred
+       over hiding information - empty space at the bottom is worse than wraps. */
     /* On narrow (phone) screens stack the gauges and give each full width so
        labels and scale numbers never wrap into unreadable fragments. */
     .compact DashboardPane > Horizontal > Vertical:first-child > Horizontal:first-child {
@@ -76,9 +75,6 @@ class GT7App(App):
     .compact DashboardPane RpmBlock, .compact DashboardPane SpeedBlock {
         width: 100%;
         height: auto;
-    }
-    .wide DashboardPane .wide-only {
-        display: block;
     }
     DetailPane {
         layout: vertical;
