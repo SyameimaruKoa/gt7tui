@@ -104,6 +104,7 @@ class TelemetryFrame:
 
     # Extended fields (GT7 >= 1.42, heartbeat "B" / "~")
     wheel_rotation_rad: float | None = None
+    steering_rate: float | None = None
     sway: float | None = None
     heave: float | None = None
     surge: float | None = None
@@ -252,6 +253,7 @@ def decode_packet(d: bytes) -> TelemetryFrame:
     # EnergyRecovery, Unk7.
     if len(d) >= 0x13C:
         frame.wheel_rotation_rad = _safe_float(_f(d, 0x128))
+        frame.steering_rate = _safe_float(_f(d, 0x12C))
         frame.sway = _safe_float(_f(d, 0x130))
         frame.heave = _safe_float(_f(d, 0x134))
         frame.surge = _safe_float(_f(d, 0x138))

@@ -232,10 +232,9 @@ class DetailPane(Container):
                                          (f"{f.throttle_filtered:3d} / {f.brake_filtered:3d}", "cyan"),
                                          ("  (physical)", "grey50")))
             if f.wheel_rotation_rad is not None:
-                ft.add_row(meter("steering", f.wheel_rotation_rad, 3.2))
-                ft.add_row(meter("sway", f.sway or 0, 30.0))
-                ft.add_row(meter("heave", f.heave or 0, 15.0))
-                ft.add_row(meter("surge", f.surge or 0, 25.0))
+                ft.add_row(meter("steer rad", f.wheel_rotation_rad, 3.2))
+            if f.steering_rate is not None:
+                ft.add_row(meter("steer r/s", f.steering_rate, 12.0))
             if f.energy_recovery is not None:
                 ft.add_row(meter("ER 0x150", f.energy_recovery, 1.0))
             if f.motor_assist is not None:
@@ -243,6 +242,10 @@ class DetailPane(Container):
             ft.add_row(Text(""))
 
             ft.add_row(Text("UNKNOWN (undocumented)", style="bold yellow"))
+            if f.sway is not None:
+                ft.add_row(meter("sway", f.sway, 30.0))
+                ft.add_row(meter("heave", f.heave or 0, 15.0))
+                ft.add_row(meter("surge", f.surge or 0, 25.0))
             if f.unk5 is not None:
                 for i, v in enumerate(f.unk5):
                     ft.add_row(meter(f"unk5[{i}]", v, 1.0))
