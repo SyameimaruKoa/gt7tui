@@ -37,6 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bind", default=None, help="UDP bind address (default: 0.0.0.0)")
     parser.add_argument("--recv-port", type=int, default=None, help="UDP receive port (default: 33740)")
     parser.add_argument("--send-port", type=int, default=None, help="UDP heartbeat destination port (default: 33739)")
+    parser.add_argument("--heartbeat", choices=["A", "B", "~"], default=None, help="Heartbeat type: A=0x128, B=0x13C, ~=0x158 (default: ~)")
     parser.add_argument("--timeout", type=float, default=None, help="UDP receive timeout seconds (default: 10.0)")
     parser.add_argument("--refresh-hz", type=float, default=None, help="UI refresh rate upper bound in Hz (default: 20.0)")
     parser.add_argument("--version", action="store_true", help="Show version and exit")
@@ -73,6 +74,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "bind": args.bind,
         "recv_port": args.recv_port,
         "send_port": args.send_port,
+        "heartbeat": args.heartbeat,
         "timeout": args.timeout,
         "refresh_hz": args.refresh_hz,
         "record_path": args.record_path,

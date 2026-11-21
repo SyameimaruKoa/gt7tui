@@ -154,6 +154,7 @@ class GT7App(App):
                 heartbeat_interval_packets=self.config.heartbeat_interval_packets,
                 store=self.store,
                 record_path=self.config.record_path,
+                heartbeat=self.config.heartbeat,
             )
             self.receiver.start()
 

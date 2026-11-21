@@ -7,7 +7,7 @@ from typing import Callable, Optional
 
 from .capture import CaptureWriter, DIR_RECV, DIR_SEND
 from .decoder import TelemetryFrame, decode_packet
-from .protocol import decrypt_packet
+from .protocol import decrypt_packet, HEARTBEAT_TILDE, HEARTBEAT_A
 from .state import StateStore
 
 
@@ -22,6 +22,7 @@ class LiveReceiver:
         heartbeat_interval_packets: int,
         store: StateStore,
         record_path: str | None = None,
+        heartbeat: str = HEARTBEAT_TILDE,
     ) -> None:
         self.ps_ip = ps_ip
         self.bind = bind
@@ -31,6 +32,7 @@ class LiveReceiver:
         self.heartbeat_interval_packets = max(1, heartbeat_interval_packets)
         self.store = store
         self.record_path = record_path
+        self.heartbeat = heartbeat if heartbeat in ("A", "B", "~") else HEARTBEAT_TILDE
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._sock: Optional[socket.socket] = None
@@ -55,7 +57,7 @@ class LiveReceiver:
 
     def _send_heartbeat(self, sock: socket.socket) -> None:
         try:
-            payload = b"A"
+            payload = self.heartbeat.encode("ascii")
             sock.sendto(payload, (self.ps_ip, self.send_port))
             if self._recorder:
                 try:
@@ -106,7 +108,7 @@ class LiveReceiver:
                         if pkt_count >= self.heartbeat_interval_packets:
                             self._send_heartbeat(sock)
                             pkt_count = 0
-                        ddata = decrypt_packet(data)
+                        ddata = decrypt_packet(data, self.heartbeat)
                         if not ddata:
                             self.store.mark_dropped()
                             continue

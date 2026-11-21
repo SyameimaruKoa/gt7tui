@@ -102,6 +102,17 @@ class TelemetryFrame:
     road_plane_z: float = 0.0
     road_plane_distance: float = 0.0
 
+    # Extended fields (GT7 >= 1.42, heartbeat "B" / "~")
+    wheel_rotation_rad: float | None = None
+    sway: float | None = None
+    heave: float | None = None
+    surge: float | None = None
+    throttle_filtered: int | None = None
+    brake_filtered: int | None = None
+    car_type: int | None = None
+    energy_recovery: float | None = None
+    packet_expansion: str = "none"
+
     flags_8e: int = 0
     flags_8f: int = 0
     flags_93: int = 0
@@ -227,6 +238,22 @@ def decode_packet(d: bytes) -> TelemetryFrame:
     frame.flags_93 = _B(d, 0x93)
     for off in (0x94, 0x98, 0x9C, 0xA0, 0xD4, 0xD8, 0xDC, 0xE0, 0xE4, 0xE8, 0xEC, 0xF0):
         frame.unknown_floats[f"0x{off:02X}"] = _safe_float(_f(d, off))
+
+    # Extended fields (PDTools SimulatorPacket.Read). 0x13C = +WheelRotation,
+    # FillerFloatFB, Sway, Heave, Surge.  0x158 = +Unk bytes, Unk5 vec4,
+    # EnergyRecovery, Unk7.
+    if len(d) >= 0x13C:
+        frame.wheel_rotation_rad = _safe_float(_f(d, 0x128))
+        frame.sway = _safe_float(_f(d, 0x130))
+        frame.heave = _safe_float(_f(d, 0x134))
+        frame.surge = _safe_float(_f(d, 0x138))
+        frame.packet_expansion = "0x13C"
+    if len(d) >= 0x158:
+        frame.throttle_filtered = _B(d, 0x13C)
+        frame.brake_filtered = _B(d, 0x13D)
+        frame.car_type = _B(d, 0x13E)
+        frame.energy_recovery = _safe_float(_f(d, 0x150))
+        frame.packet_expansion = "0x158"
 
     return frame
 

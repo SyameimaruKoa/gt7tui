@@ -6,7 +6,7 @@ from typing import Optional
 
 from .capture import CaptureReader, DIR_RECV
 from .decoder import decode_packet
-from .protocol import decrypt_packet
+from .protocol import decrypt_packet_auto
 from .state import StateStore
 
 
@@ -62,7 +62,7 @@ class ReplaySource:
                     if rec.direction != DIR_RECV:
                         continue
                     self.store.mark_packet()
-                    ddata = decrypt_packet(rec.payload)
+                    ddata, _hb = decrypt_packet_auto(rec.payload)
                     if not ddata:
                         self.store.mark_dropped()
                         continue

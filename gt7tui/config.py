@@ -27,6 +27,7 @@ def default_config() -> dict[str, Any]:
             "send_port": 33739,
             "timeout": 10.0,
             "heartbeat_interval_packets": 100,
+            "heartbeat": "~",
         },
         "ui": {
             "refresh_hz": 20.0,
@@ -113,6 +114,7 @@ class AppConfig:
     timeout: float = 10.0
     refresh_hz: float = 20.0
     heartbeat_interval_packets: int = 100
+    heartbeat: str = "~"
     layout: str = "default"
     curves_path: str = "gt7tui_curves.json"
     show: dict[str, bool] = field(default_factory=lambda: {"dashboard": True, "tyres": True, "detail": True, "curve": True})
@@ -148,7 +150,7 @@ def build_config(file_cfg: dict[str, Any] | None = None, cli: dict[str, Any] | N
         for k, v in cli.items():
             if v is None:
                 continue
-            if k in ("bind", "recv_port", "send_port", "timeout", "heartbeat_interval_packets"):
+            if k in ("bind", "recv_port", "send_port", "timeout", "heartbeat_interval_packets", "heartbeat"):
                 cli_net[k] = v
             elif k in ("refresh_hz", "layout"):
                 cli_ui[k] = v
@@ -173,6 +175,7 @@ def build_config(file_cfg: dict[str, Any] | None = None, cli: dict[str, Any] | N
         timeout=float(net.get("timeout", 10.0)),
         refresh_hz=float(ui.get("refresh_hz", 20.0)),
         heartbeat_interval_packets=int(net.get("heartbeat_interval_packets", 100)),
+        heartbeat=str(net.get("heartbeat", "~")),
         layout=str(ui.get("layout", "default")),
         curves_path=str(ui.get("curves_path", "gt7tui_curves.json")),
         show=dict(ui.get("show", {"dashboard": True, "tyres": True, "detail": True, "curve": True})),
