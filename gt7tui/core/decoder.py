@@ -241,8 +241,11 @@ def decode_packet(d: bytes) -> TelemetryFrame:
     frame.flags_8e = _B(d, 0x8E)
     frame.flags_8f = _B(d, 0x8F)
     frame.flags_93 = _B(d, 0x93)
-    for off in (0x94, 0x98, 0x9C, 0xA0, 0xD4, 0xD8, 0xDC, 0xE0, 0xE4, 0xE8, 0xEC, 0xF0):
-        frame.unknown_floats[f"0x{off:02X}"] = _safe_float(_f(d, off))
+    # 0x94-0xA0 are decoded as RoadPlane above. 0x93 and 0xD4-0xF0 have been
+    # zero in every observed frame, but that is only an observation - keep them
+    # as unknown so a future car/situation that populates them is visible.
+    for off in (0x93, 0xD4, 0xD8, 0xDC, 0xE0, 0xE4, 0xE8, 0xEC, 0xF0):
+        frame.unknown_floats[f"0x{off:02X}"] = float(_B(d, off) if off == 0x93 else _f(d, off))
 
     # Extended fields (PDTools SimulatorPacket.Read). 0x13C = +WheelRotation,
     # FillerFloatFB, Sway, Heave, Surge.  0x158 = +Unk bytes, Unk5 vec4,

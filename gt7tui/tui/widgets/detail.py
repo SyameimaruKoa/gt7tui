@@ -220,36 +220,34 @@ class DetailPane(Container):
             ft.add_row(Text("Flags", style="bold grey70"))
             ft.add_row(lamps("0x8E", f.flags_8e))
             ft.add_row(lamps("0x8F", f.flags_8f))
-            ft.add_row(lamps("0x93", f.flags_93))
             ft.add_row(Text(""))
 
-            ft.add_row(Text("Extended fields (heartbeat ~)", style="bold grey70"))
+            ft.add_row(Text("Identified fields (heartbeat ~)", style="bold green"))
             ft.add_row(Text.assemble(("pkt      ", "grey70"), (f.packet_expansion, "cyan")))
             if f.energy_recovery_flag is not None:
-                ft.add_row(Text.assemble(("unk3 0x13E", "grey70"), (f" {f.car_type}", "cyan"),
-                                         ("   unk4 0x13F", "grey70"), (f" {f.energy_recovery_flag}", "cyan")))
+                ft.add_row(Text.assemble(("car type ", "grey70"), (f"{f.car_type}", "cyan"),
+                                         ("  ER flag ", "grey70"), (f"{f.energy_recovery_flag}", "cyan")))
             if f.throttle_filtered is not None:
-                ft.add_row(Text.assemble(("unk1 0x13C", "grey70"), (f" {f.throttle_filtered:3d}", "cyan"),
-                                         ("   unk2 0x13D", "grey70"), (f" {f.brake_filtered:3d}", "cyan")))
+                ft.add_row(Text.assemble(("thr/brk  ", "grey70"),
+                                         (f"{f.throttle_filtered:3d} / {f.brake_filtered:3d}", "cyan"),
+                                         ("  (physical)", "grey50")))
             if f.wheel_rotation_rad is not None:
-                ft.add_row(meter("strangl", f.wheel_rotation_rad, 3.2))
-            if f.sway is not None:
-                ft.add_row(meter("sway", f.sway, 30.0))
-            if f.heave is not None:
-                ft.add_row(meter("heave", f.heave, 15.0))
-            if f.surge is not None:
-                ft.add_row(meter("surge", f.surge, 25.0))
-            if f.unk5 is not None:
-                for i, v in enumerate(f.unk5):
-                    ft.add_row(meter(f"unk5[{i}]", v, 1.0))
+                ft.add_row(meter("steering", f.wheel_rotation_rad, 3.2))
+                ft.add_row(meter("sway", f.sway or 0, 30.0))
+                ft.add_row(meter("heave", f.heave or 0, 15.0))
+                ft.add_row(meter("surge", f.surge or 0, 25.0))
             if f.energy_recovery is not None:
                 ft.add_row(meter("ER 0x150", f.energy_recovery, 1.0))
             if f.motor_assist is not None:
-                ft.add_row(meter("Unk7 0x154", f.motor_assist, 1.5))
+                ft.add_row(meter("ast 0x154", f.motor_assist, 1.5))
             ft.add_row(Text(""))
 
-            ft.add_row(Text("Unknown floats (base packet)", style="bold grey70"))
+            ft.add_row(Text("UNKNOWN (undocumented)", style="bold yellow"))
+            if f.unk5 is not None:
+                for i, v in enumerate(f.unk5):
+                    ft.add_row(meter(f"unk5[{i}]", v, 1.0))
+            if not f.unk5 and not f.unknown_floats:
+                ft.add_row(Text("none in this packet", style="dim"))
             for k, v in f.unknown_floats.items():
-                lim = max(1.0, abs(v) * 1.5)
-                ft.add_row(meter(k, v, lim if lim > 0 else 1.0))
+                ft.add_row(meter(k, v, max(1.0, abs(v) * 1.5)))
         self.flags.update(_panel(ft, title="Flags / Unknown", border_style="yellow"))
