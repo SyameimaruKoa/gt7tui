@@ -126,10 +126,13 @@ def _h_meter(label: str, value: float, vmax: float, unit: str, color: str, width
 
 
 def _suspension_gauge(value: float, width: int = 18) -> Text:
-    # Suspension travel shown as centered indicator (can be +/- around nominal)
-    # Value range roughly -0.15..0.15 in typical data; normalize around 0.
-    lim = 0.12
-    ratio = max(-1.0, min(1.0, value / lim))
+    # Suspension height (0x-C4..) is an absolute ride-height value around 0.25m,
+    # not a +/- travel around zero. Centre the gauge on the observed nominal and
+    # show deviation so compression/rebound is visible.
+    nominal = 0.25
+    lim = 0.08
+    dev = value - nominal
+    ratio = max(-1.0, min(1.0, dev / lim))
     mid = width // 2
     pos = mid + int(round(ratio * (mid - 1)))
     pos = max(0, min(width - 1, pos))
@@ -146,7 +149,9 @@ def _suspension_gauge(value: float, width: int = 18) -> Text:
         else:
             t.append("·", style="grey30")
     t.append("]", style="grey50")
-    t.append(f" {value:+.3f}", style="bright_magenta")
+    # show absolute value and deviation from nominal
+    t.append(f" {value:.3f}", style="bright_magenta")
+    t.append(f" ({dev:+.3f})", style="grey50")
     return t
 
 

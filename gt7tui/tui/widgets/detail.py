@@ -76,17 +76,17 @@ class DetailPane(Container):
     def __init__(self, config: AppConfig, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.config = config
-        self.dynamics = Static()
-        self.gearing = Static()
+        self.dynamics = Static(classes="detail-dynamics")
+        self.gearing = Static(classes="detail-gearing")
         self.flags = Static(id="flags-panel")
-        self.session = Static()
+        self.session = Static(classes="detail-session")
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            with Horizontal():
+            with Horizontal(classes="top-row"):
                 yield self.session
                 yield self.gearing
-            with Horizontal():
+            with Horizontal(classes="bottom-row"):
                 yield self.dynamics
                 yield self.flags
 
@@ -247,8 +247,11 @@ class DetailPane(Container):
                 ft.add_row(meter("steer r/s", f.steering_rate, 12.0))
             if f.energy_recovery is not None:
                 ft.add_row(meter("ER 0x150", f.energy_recovery, 1.0))
-            if f.motor_assist is not None:
-                ft.add_row(meter("ast 0x154", f.motor_assist, 1.5))
+            if f.engine_output is not None:
+                ft.add_row(meter("eng 0x154", f.engine_output, 1.5))
+            if f.motor_outputs is not None:
+                for i, v in enumerate(f.motor_outputs):
+                    ft.add_row(meter(f"mot[{i}]", v, 1.0))
             ft.add_row(Text(""))
 
             ft.add_row(Text("UNKNOWN (undocumented)", style="bold yellow"))
@@ -256,10 +259,7 @@ class DetailPane(Container):
                 ft.add_row(meter("sway", f.sway, 30.0))
                 ft.add_row(meter("heave", f.heave or 0, 15.0))
                 ft.add_row(meter("surge", f.surge or 0, 25.0))
-            if f.unk5 is not None:
-                for i, v in enumerate(f.unk5):
-                    ft.add_row(meter(f"unk5[{i}]", v, 1.0))
-            if not f.unk5 and not f.unknown_floats:
+            if not f.unknown_floats:
                 ft.add_row(Text("none in this packet", style="dim"))
             for k, v in f.unknown_floats.items():
                 ft.add_row(meter(k, v, max(1.0, abs(v) * 1.5)))

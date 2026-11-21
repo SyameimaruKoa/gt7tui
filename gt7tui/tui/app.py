@@ -45,9 +45,14 @@ class GT7App(App):
     DashboardPane > Horizontal {
         height: 1fr;
     }
+    /* Right column carries pedals + vehicle + boost + HV + G + tyres; give it
+       roughly twice the width of the gauge/lap column instead of splitting evenly. */
     DashboardPane > Horizontal > Vertical {
         height: auto;
         width: 1fr;
+    }
+    DashboardPane > Horizontal > Vertical.wide-right {
+        width: 2fr;
     }
     DashboardPane > Horizontal > Vertical > Horizontal {
         height: auto;
@@ -89,11 +94,28 @@ class GT7App(App):
     }
     DetailPane Static {
         height: auto;
+        width: auto;
+    }
+    DetailPane .detail-session {
+        width: 3fr;
+    }
+    DetailPane .detail-gearing {
+        width: 2fr;
+    }
+    DetailPane .detail-dynamics {
         width: 1fr;
     }
     DetailPane #flags-panel {
+        width: 2fr;
         height: 1fr;
         overflow-y: auto;
+    }
+    /* Let the lower (data-heavy) row take more vertical room than the top row */
+    DetailPane > Vertical > Horizontal.top-row {
+        height: 1fr;
+    }
+    DetailPane > Vertical > Horizontal.bottom-row {
+        height: 2fr;
     }
     """
 

@@ -675,16 +675,11 @@ class HVBatteryBlock(Static):
     def render_block(self, frame: TelemetryFrame | None):
         if not frame or frame.energy_recovery is None:
             return _panel(Text("No HV data (needs ~ heartbeat)", style="dim"), title="HV Battery", border_style="green")
-        # GT7 HUD battery arrows:
-        # - unk4 (0x13F) == 1 : EnergyRecovery (0x150) is the real assist value
-        #   (e.g. FXX cuts assist at 300 km/h -> ER drops to 0).
-        # - unk4 == 0 : ER is not broadcast; motor_assist (0x154) tracks the HUD
-        #   arrows instead (e.g. NSX).
-        if frame.energy_recovery_flag == 1 and frame.energy_recovery is not None:
-            er = max(-1.0, min(1.0, frame.energy_recovery))
-        elif frame.motor_assist is not None:
-            er = max(-1.0, min(1.0, frame.motor_assist))
-        elif frame.energy_recovery is not None:
+        # GT7 HUD battery arrows: 0x150 = motor assist (1 MAX).
+        # Positive = assist (battery discharge), negative = regen.
+        # 0x154 is engine output, not the battery arrow value.
+        if frame.energy_recovery is not None:
+            # 0x150 = motor assist (1 MAX). Positive = assist, negative = regen.
             er = max(-1.0, min(1.0, frame.energy_recovery))
         else:
             g = Table.grid(padding=(0, 0))
@@ -713,6 +708,17 @@ class HVBatteryBlock(Static):
         g = Table.grid(padding=(0, 0))
         g.add_row(t)
         g.add_row(Text("  REGEN <--|--> ASSIST (battery discharge)", style="grey50"))
+        if frame.motor_outputs is not None:
+            vals = frame.motor_outputs
+            bt = Text("  MTR ")
+            for i, v in enumerate(vals):
+                bt.append(f"[{i}] ", style="grey50")
+                bt.append(f"{v:+.2f}", style="bold bright_cyan")
+                bt.append("  ", style="")
+            bt.append(f" sum {sum(vals):+.2f}", style="grey70")
+            g.add_row(bt)
+        if frame.engine_output is not None:
+            g.add_row(Text(f"  ENG {frame.engine_output:+.2f}", style="grey70"))
         return _panel(g, title="HV Battery", border_style="green")
 
 
@@ -748,7 +754,7 @@ class DashboardPane(Container):
                     yield self.lap_block
                 yield self.session_block
                 yield self.layout_stats
-            with Vertical():
+            with Vertical(classes="wide-right"):
                 yield self.pedals_block
                 yield self.vehicle_block
                 yield self.boost_block
