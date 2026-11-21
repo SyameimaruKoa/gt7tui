@@ -41,9 +41,10 @@ class GT7App(App):
     }
     #dashboard-root, #tyres-root, #detail-root {
         height: 1fr;
+        overflow-y: auto;
     }
     DashboardPane > Horizontal {
-        height: 1fr;
+        height: auto;
     }
     /* Right column carries pedals + vehicle + boost + HV + G + tyres; give it
        roughly twice the width of the gauge/lap column instead of splitting evenly. */

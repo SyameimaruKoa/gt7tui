@@ -9,7 +9,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from textual.app import ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container, Horizontal, Vertical, ScrollableContainer
 from textual.widgets import Static
 
 from ...config import AppConfig
@@ -835,7 +835,7 @@ class HVBatteryBlock(Static):
         return _panel(g, title="HV Battery", border_style="green")
 
 
-class DashboardPane(Container):
+class DashboardPane(ScrollableContainer):
     def __init__(self, config: AppConfig, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.config = config
