@@ -13,7 +13,7 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Static
 
 from ...config import AppConfig
-from ...core.decoder import TelemetryFrame, TyreWheel, induction_state, gear_ratio_valid, wheel_drive_state, drivetrain_layout, tyre_roles
+from ...core.decoder import TelemetryFrame, TyreWheel, induction_state, gear_ratio_valid, wheel_drive_state, drivetrain_layout, tyre_roles, has_energy_recovery
 from ...core.state import RuntimeState
 
 
@@ -360,7 +360,18 @@ class PedalsBlock(Static):
             lines.append(" ".join(row))
         labels = "    " + "  ".join([f"{name:^4}" for name, _, _ in cols])
         vals = "    " + "  ".join([f"{val:3.0f}%" for _, val, _ in cols])
+        info = []
+        if frame and frame.throttle_filtered is not None:
+            raw = frame.throttle_filtered / 255.0 * 100.0
+            if raw - frame.throttle > 2.0:
+                info.append(Text.assemble(("TCS ", "bold yellow"), (f"in {raw:3.0f}% out {frame.throttle:3.0f}%", "yellow")))
+        if frame and frame.brake_filtered is not None:
+            raw = frame.brake_filtered / 255.0 * 100.0
+            if raw - frame.brake > 2.0:
+                info.append(Text.assemble(("ABS ", "bold yellow"), (f"in {raw:3.0f}% out {frame.brake:3.0f}%", "yellow")))
         content = "\n".join(lines + [labels, vals])
+        if info:
+            content = Group(content, *info)
         return _panel(content, title="Pedals", border_style="magenta")
 
 
@@ -457,6 +468,10 @@ class VehicleBlock(Static):
         # temps & pressure as analog bars
         g.add_row(_mini_gauge("OIL P", frame.oil_pressure_bar, 10.0, "b", "yellow3", width=14 if compact else 18))
         g.add_row(Text(f"RH {frame.ride_height_mm:5.0f} mm", style="grey70"))
+        if frame.packet_expansion != "none":
+            g.add_row(Text(f"EXT {frame.packet_expansion}  carType {frame.car_type}  ERec {frame.energy_recovery or 0:.2f}", style="grey50"))
+            if has_energy_recovery(frame):
+                g.add_row(Text(f"  Energy recovery  {frame.energy_recovery or 0:.2f}", style="bright_green"))
         return _panel(g, title="Vehicle", border_style="yellow")
 
 
