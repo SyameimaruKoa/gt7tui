@@ -152,7 +152,13 @@ def _semi_gauge(
     if lr is not None and ratio >= lr - 0.03:
         ncolor = limit_color
     for (x, y) in needle_cells[:-1]:
-        grid[y][x] = "│" if abs(math.cos(needle_angle)) < 0.35 else ("/" if math.cos(needle_angle) < 0 else "\\")
+        ca = math.cos(needle_angle)
+        sa = math.sin(needle_angle)
+        if abs(sa) >= abs(ca):
+            ch = "┃"
+        else:
+            ch = "━"
+        grid[y][x] = ch
         style_grid[y][x] = f"bold {ncolor}"
     if needle_cells:
         x, y = needle_cells[-1]

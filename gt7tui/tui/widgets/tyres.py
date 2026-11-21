@@ -227,7 +227,7 @@ class TyresPane(Container):
             bottom.add_column(justify="center")
             bottom.add_column(justify="center")
             bottom.add_column(justify="center")
-            axle = Text("━━━━━\nfront / rear\n━━━━━", style="grey50", justify="center")
+            axle = Text("━━━━━\nfront-rear\n━━━━━", style="grey50", justify="center")
             bottom.add_row(node(rl, "RL"), axle, node(rr, "RR"))
             avg_temp = sum(w.temp_c for w in tyres.values() if w) / max(1, len(tyres))
             info = Text.assemble(("Avg tyre temp: ", "grey70"), (f"{avg_temp:5.1f}°C", f"bold {_temp_style(avg_temp, cfg)}"))
