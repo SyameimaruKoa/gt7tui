@@ -33,8 +33,8 @@ class DemoSource:
         t0 = time.monotonic()
         pkt = 0
         interval = 1.0 / self.refresh_hz
-        best_ms = 92345
-        last_ms = 93120
+        best_ms = 90000  # demo lap_len is 90s
+        last_ms = 90120
         total_laps = 5
         while not self._stop.is_set():
             now = time.monotonic() - t0

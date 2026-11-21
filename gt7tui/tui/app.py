@@ -45,8 +45,24 @@ class GT7App(App):
         height: 1fr;
     }
     DashboardPane > Horizontal > Vertical {
-        height: 1fr;
+        height: auto;
         width: 1fr;
+    }
+    DashboardPane > Horizontal > Vertical > Horizontal {
+        height: auto;
+    }
+    /* Gear cluster: keep label and digits on one line, never wrap vertically */
+    DashboardPane .gear-cluster {
+        width: 12;
+        height: auto;
+    }
+    DashboardPane .gear-cluster .title {
+        width: 100%;
+        text-wrap: nowrap;
+    }
+    DashboardPane .gear-cluster Digits {
+        width: 100%;
+        height: 3;
     }
     DashboardPane RpmBlock, DashboardPane SpeedBlock, DashboardPane PedalsBlock, DashboardPane LapBlock, DashboardPane VehicleBlock, DashboardPane SessionBlock, DashboardPane DynamicsBlock {
         height: auto;

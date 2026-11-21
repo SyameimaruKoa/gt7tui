@@ -10,7 +10,7 @@ from rich.table import Table
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Digits, Static
+from textual.widgets import Static
 
 from ...config import AppConfig
 from ...core.decoder import TelemetryFrame, TyreWheel
@@ -379,7 +379,8 @@ class LapBlock(Static):
         table.add_row(f"Best:    {_fmt_lap(frame.best_lap_ms)}")
         table.add_row(f"Last:    {_fmt_lap(frame.last_lap_ms)}")
         delta_text = Text("Delta:   --")
-        if frame.best_lap_ms > 0 and cur > 0 and frame.current_lap > 0:
+        # Only meaningful once the driver has completed at least one full lap this session.
+        if frame.best_lap_ms > 0 and cur > 0 and frame.current_lap > 1:
             delta = cur - (frame.best_lap_ms / 1000.0)
             colors = cfg.colors.get("delta", {})
             style = colors.get("neutral", "white")
@@ -579,7 +580,7 @@ class DashboardPane(Container):
     def __init__(self, config: AppConfig, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.config = config
-        self.gear_digits = Digits("N")
+        self.gear_digits = Static("N")
         self.gear_info = Static("", classes="title")
         self.rpm_block = RpmBlock()
         self.speed_block = SpeedBlock()
@@ -597,7 +598,7 @@ class DashboardPane(Container):
                     yield self.rpm_block
                     yield self.speed_block
                 with Horizontal():
-                    with Vertical():
+                    with Vertical(classes="gear-cluster"):
                         yield Static("GEAR", classes="title")
                         yield self.gear_digits
                         yield self.gear_info
