@@ -76,7 +76,7 @@ class DetailPane(Container):
     def __init__(self, config: AppConfig, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.config = config
-        self.dynamics = Static(classes="detail-dynamics")
+        self.dynamics = Static(id="dynamics-panel", classes="detail-dynamics")
         self.gearing = Static(classes="detail-gearing")
         self.flags = Static(id="flags-panel")
         self.session = Static(classes="detail-session")

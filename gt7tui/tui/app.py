@@ -66,17 +66,8 @@ class GT7App(App):
         height: auto;
     }
     /* All panels are always visible. On narrow screens wrapping is preferred
-       over hiding information - empty space at the bottom is worse than wraps. */
-    /* On narrow (phone) screens stack the gauges and give each full width so
-       labels and scale numbers never wrap into unreadable fragments. */
-    .compact DashboardPane > Horizontal > Vertical:first-child > Horizontal:first-child {
-        layout: vertical;
-        height: auto;
-    }
-    .compact DashboardPane RpmBlock, .compact DashboardPane SpeedBlock {
-        width: 100%;
-        height: auto;
-    }
+       over hiding information - empty space at the bottom is worse than wraps.
+       Gauges stay side-by-side (compact render geometry keeps them readable). */
     DetailPane {
         layout: vertical;
     }
@@ -95,12 +86,18 @@ class GT7App(App):
     }
     DetailPane .detail-gearing {
         width: 2fr;
+        height: 1fr;
+        overflow-y: auto;
     }
     DetailPane .detail-dynamics {
-        width: 1fr;
+        width: 2fr;
     }
     DetailPane #flags-panel {
-        width: 2fr;
+        width: 1.5fr;
+        height: 1fr;
+        overflow-y: auto;
+    }
+    DetailPane #dynamics-panel {
         height: 1fr;
         overflow-y: auto;
     }
