@@ -277,3 +277,44 @@ def induction_state(frame: TelemetryFrame) -> str:
 def gear_ratio_valid(frame: TelemetryFrame) -> bool:
     """Some cars (CVT / special) send zero gear ratios."""
     return sum(1 for r in frame.gear_ratios if r > 0) >= 2
+
+
+def tyre_roles(frame: TelemetryFrame, g_lateral: float, g_longitudinal: float) -> dict[str, str]:
+    """Describe each wheel's current job.
+
+    - Longitudinal: accelerating -> driven axle wheels DRIVE; braking -> all BRAKE.
+    - Lateral: outside wheels (loaded by cornering force) GRIP, inside wheels INNER.
+    Rotational direction: left turn -> right side outside.
+    """
+    layout = drivetrain_layout(frame)
+    roles: dict[str, str] = {}
+    # outside side from lateral G: negative lateral = turning left -> right wheels outside
+    if g_lateral > 0.05:
+        outside = "R"
+    elif g_lateral < -0.05:
+        outside = "L"
+    else:
+        outside = ""
+    # longitudinal state
+    state = ""
+    if frame.brake > 5.0 or g_longitudinal < -0.08:
+        state = "BRAKE"
+    elif frame.throttle > 5.0 or g_longitudinal > 0.08:
+        state = "DRIVE"
+    for key in ("FL", "FR", "RL", "RR"):
+        parts = []
+        axial = "F" if key.startswith("F") else "R"
+        # longitudinal role
+        if state == "BRAKE":
+            parts.append("BRK")
+        elif state == "DRIVE":
+            if layout == "AWD" or layout == "--" or axial == layout[0]:
+                parts.append("DRV")
+        # lateral role
+        if outside:
+            if key.endswith(outside):
+                parts.append("GRIP")
+            else:
+                parts.append("in")
+        roles[key] = "/".join(parts) if parts else "roll"
+    return roles

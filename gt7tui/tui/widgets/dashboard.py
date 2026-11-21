@@ -13,7 +13,7 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Static
 
 from ...config import AppConfig
-from ...core.decoder import TelemetryFrame, TyreWheel, induction_state, gear_ratio_valid, wheel_drive_state, drivetrain_layout
+from ...core.decoder import TelemetryFrame, TyreWheel, induction_state, gear_ratio_valid, wheel_drive_state, drivetrain_layout, tyre_roles
 from ...core.state import RuntimeState
 
 
@@ -538,7 +538,7 @@ class BoostBlock(Static):
 class TyreSummaryBlock(Static):
     """Compact 4-wheel tyre overview for the dashboard (wide layout only)."""
 
-    def render_block(self, frame: TelemetryFrame | None, cfg: AppConfig):
+    def render_block(self, frame: TelemetryFrame | None, snap: RuntimeState, cfg: AppConfig):
         g = Table.grid(padding=(0, 1))
         if not frame or not frame.tyres:
             g.add_row(Text("No tyre data", style="dim"))
@@ -560,28 +560,19 @@ class TyreSummaryBlock(Static):
             return colors.get("warm", "yellow")
 
         order = ("FL", "FR", "RL", "RR")
-        slip_th = float(cfg.thresholds.get("slip", {}).get("warn_ratio", 1.10))
-        slip_colors = cfg.colors.get("slip", {})
+        roles = tyre_roles(frame, snap.g_lateral, snap.g_longitudinal)
         for key in order:
             w = frame.tyres.get(key)
             if not w:
                 g.add_row(Text.assemble((f"{key}  ", "bold grey50"), ("no data", "dim")))
                 continue
             tcol = temp_style(w.temp_c)
-            if w.slip_ratio is not None:
-                sv = w.slip_ratio
-                scol = slip_colors.get("high", "red") if sv >= slip_th + 0.1 else (slip_colors.get("warn", "yellow") if sv >= slip_th else slip_colors.get("normal", "green"))
-                slip_txt = f"{sv:4.2f}" if sv < 10 else "HIGH"
-            else:
-                scol, slip_txt = "grey50", "  --"
-            state = wheel_drive_state(frame, key)
-            dstyle = {"DRV": "bold green", "BRK": "bold red", "ROL": "grey70", "--": "grey50"}.get(state, "grey70")
-            dtxt = {"DRV": "DRIVE", "BRK": "BRAKE", "ROL": "roll", "--": "--"}.get(state, state)
+            role = roles.get(key, "")
+            rstyle = "bold green" if "DRV" in role or "GRIP" in role else ("bold red" if "BRK" in role else "grey70")
             g.add_row(Text.assemble(
                 (f"{key}  ", "bold white"),
                 (f"{w.temp_c:6.1f}°C", f"bold {tcol}"),
-                ("  slip ", "grey50"), (f"{slip_txt:>5}", scol),
-                ("  ", "grey50"), (f"{dtxt:>5}", dstyle),
+                ("  ", "grey50"), (f"{role:>12}", rstyle),
             ))
         g.add_row(Text.assemble(("Layout ", "grey70"), (drivetrain_layout(frame), "bold cyan")))
         return _panel(g, title="Tyres", border_style="blue")
@@ -691,6 +682,6 @@ class DashboardPane(Container):
         self.lap_block.update(self.lap_block.render_block(frame, snap, cfg))
         self.vehicle_block.update(self.vehicle_block.render_block(frame, snap, cfg, compact=compact))
         self.session_block.update(self.session_block.render_block(frame, snap, cfg))
-        self.tyre_summary.update(self.tyre_summary.render_block(frame, cfg))
+        self.tyre_summary.update(self.tyre_summary.render_block(frame, snap, cfg))
         self.boost_block.update(self.boost_block.render_block(frame, cfg))
         self.gsensor_block.update(self.gsensor_block.render_block(snap, cfg))

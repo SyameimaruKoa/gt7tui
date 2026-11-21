@@ -12,7 +12,7 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Static
 
 from ...config import AppConfig
-from ...core.decoder import TyreWheel, wheel_drive_state, drivetrain_layout
+from ...core.decoder import TyreWheel, wheel_drive_state, drivetrain_layout, tyre_roles
 from ...core.state import RuntimeState
 
 
@@ -162,7 +162,7 @@ def _tyre_icon(temp: float, cfg: AppConfig) -> Text:
     return t
 
 
-def _wheel_panel(name: str, wheel: TyreWheel | None, cfg: AppConfig, frame=None, key="") -> Panel:
+def _wheel_panel(name: str, wheel: TyreWheel | None, cfg: AppConfig, frame=None, key="", role="") -> Panel:
     if wheel is None:
         return _panel(Text("No data", style="dim"), title=name, border_style="blue")
     tstyle = _temp_style(wheel.temp_c, cfg)
@@ -173,11 +173,9 @@ def _wheel_panel(name: str, wheel: TyreWheel | None, cfg: AppConfig, frame=None,
     lines.append(head)
     lines.append(_temp_gauge(wheel.temp_c, cfg))
     lines.append(_slip_meter(wheel.slip_ratio, cfg))
-    if frame is not None:
-        state = wheel_drive_state(frame, key)
-        style = {"DRV": "bold green", "BRK": "bold red", "ROL": "grey70", "--": "grey50"}.get(state, "grey70")
-        dtxt = {"DRV": "DRIVE", "BRK": "BRAKE", "ROL": "roll", "--": "--"}.get(state, state)
-        lines.append(Text.assemble(("Drive ", "grey70"), (dtxt, style)))
+    if role:
+        rstyle = "bold green" if "DRV" in role or "GRIP" in role else ("bold red" if "BRK" in role else "grey70")
+        lines.append(Text.assemble(("Role  ", "grey70"), (role, rstyle)))
     lines.append(_h_meter("Spd", wheel.speed_kph, 400.0, "k", "bright_cyan", width=14))
     lines.append(_h_meter("Dia", wheel.diameter_m * 200.0, 100.0, "c", "bright_blue", width=14))
     lines.append(_suspension_gauge(wheel.suspension))
@@ -207,14 +205,15 @@ class TyresPane(Container):
     def update_view(self, snap: RuntimeState, cfg: AppConfig) -> None:
         frame = snap.frame
         tyres = frame.tyres if frame else {}
+        roles = tyre_roles(frame, snap.g_lateral, snap.g_longitudinal) if frame else {}
         fl = tyres.get("FL")
         fr = tyres.get("FR")
         rl = tyres.get("RL")
         rr = tyres.get("RR")
-        self.fl.update(_wheel_panel("Front Left (FL)", fl, cfg, frame=frame, key="FL"))
-        self.fr.update(_wheel_panel("Front Right (FR)", fr, cfg, frame=frame, key="FR"))
-        self.rl.update(_wheel_panel("Rear Left (RL)", rl, cfg, frame=frame, key="RL"))
-        self.rr.update(_wheel_panel("Rear Right (RR)", rr, cfg, frame=frame, key="RR"))
+        self.fl.update(_wheel_panel("Front Left (FL)", fl, cfg, frame=frame, key="FL", role=roles.get("FL", "")))
+        self.fr.update(_wheel_panel("Front Right (FR)", fr, cfg, frame=frame, key="FR", role=roles.get("FR", "")))
+        self.rl.update(_wheel_panel("Rear Left (RL)", rl, cfg, frame=frame, key="RL", role=roles.get("RL", "")))
+        self.rr.update(_wheel_panel("Rear Right (RR)", rr, cfg, frame=frame, key="RR", role=roles.get("RR", "")))
         if frame and tyres:
             def node(w: TyreWheel | None, name: str) -> Text:
                 if not w:
