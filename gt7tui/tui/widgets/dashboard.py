@@ -625,6 +625,35 @@ class GSensorBlock(Static):
         return _panel(g, title="G Sensor", border_style="bright_yellow")
 
 
+class LayoutStatsBlock(Static):
+    """Drivetrain layout statistics - reveals on-demand AWD conditions."""
+
+    def render_block(self, snap: RuntimeState, cfg: AppConfig):
+        g = Table.grid(padding=(0, 1))
+        total = snap.layout_total
+        if total <= 0:
+            g.add_row(Text("No data", style="dim"))
+            return _panel(g, title="Drive Layout", border_style="cyan")
+        order = ("AWD", "RWD", "FWD", "--")
+        for lay in order:
+            cnt = snap.layout_counts.get(lay, 0)
+            if cnt == 0:
+                continue
+            pct = cnt / total * 100.0
+            thr = snap.layout_throttle.get(lay, 0.0) / cnt
+            spd = snap.layout_speed.get(lay, 0.0) / cnt
+            color = {"AWD": "bold bright_cyan", "RWD": "bold yellow", "FWD": "bold magenta"}.get(lay, "grey70")
+            bar = _bar(pct, 100.0, 10, color.strip())
+            g.add_row(Text.assemble(
+                (f"{lay:4s}", color), (" ", ""), bar,
+                (f" {pct:5.1f}%", color),
+                (f"  thr{thr:4.0f}%", "grey70"),
+                (f" {spd:5.0f}kph", "grey70"),
+            ))
+        g.add_row(Text(f" samples {total}", style="grey50"))
+        return _panel(g, title="Drive Layout", border_style="cyan")
+
+
 class DashboardPane(Container):
     def __init__(self, config: AppConfig, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -640,6 +669,7 @@ class DashboardPane(Container):
         self.tyre_summary = TyreSummaryBlock(classes="wide-only")
         self.boost_block = BoostBlock()
         self.gsensor_block = GSensorBlock(classes="wide-only")
+        self.layout_stats = LayoutStatsBlock(classes="wide-only")
 
     def compose(self) -> ComposeResult:
         with Horizontal():
@@ -654,6 +684,7 @@ class DashboardPane(Container):
                         yield self.gear_info
                     yield self.lap_block
                 yield self.session_block
+                yield self.layout_stats
             with Vertical():
                 yield self.pedals_block
                 yield self.vehicle_block
@@ -685,3 +716,4 @@ class DashboardPane(Container):
         self.tyre_summary.update(self.tyre_summary.render_block(frame, snap, cfg))
         self.boost_block.update(self.boost_block.render_block(frame, cfg))
         self.gsensor_block.update(self.gsensor_block.render_block(snap, cfg))
+        self.layout_stats.update(self.layout_stats.render_block(snap, cfg))

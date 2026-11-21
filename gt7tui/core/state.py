@@ -5,7 +5,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .decoder import TelemetryFrame
+from .decoder import TelemetryFrame, drivetrain_layout
 
 
 @dataclass
@@ -32,6 +32,12 @@ class RuntimeState:
     g_lateral: float = 0.0
     g_longitudinal: float = 0.0
     g_vertical: float = 0.0
+
+    # drivetrain layout statistics
+    layout_counts: dict[str, int] = field(default_factory=dict)
+    layout_throttle: dict[str, float] = field(default_factory=dict)
+    layout_speed: dict[str, float] = field(default_factory=dict)
+    layout_total: int = 0
     _prev_velocity: tuple[float, float, float] | None = None
     _prev_vel_time: float = 0.0
 
@@ -56,6 +62,12 @@ class StateStore:
             # EV battery: track peak charge this session to derive SOC
             if frame.is_ev and frame.fuel_or_charge > st.ev_peak_charge:
                 st.ev_peak_charge = frame.fuel_or_charge
+            # Drivetrain layout statistics (on-demand AWD detection)
+            lay = drivetrain_layout(frame)
+            st.layout_counts[lay] = st.layout_counts.get(lay, 0) + 1
+            st.layout_throttle[lay] = st.layout_throttle.get(lay, 0.0) + frame.throttle
+            st.layout_speed[lay] = st.layout_speed.get(lay, 0.0) + frame.speed_kph
+            st.layout_total += 1
             # G sensor: differentiate velocity. Use packet timestamp when replay provides it,
             # otherwise wall clock. Guard against noise / duplicated packets.
             v = (frame.velocity_xyz.x, frame.velocity_xyz.y, frame.velocity_xyz.z)
@@ -139,6 +151,10 @@ class StateStore:
                 g_lateral=st.g_lateral,
                 g_longitudinal=st.g_longitudinal,
                 g_vertical=st.g_vertical,
+                layout_counts=dict(st.layout_counts),
+                layout_throttle=dict(st.layout_throttle),
+                layout_speed=dict(st.layout_speed),
+                layout_total=st.layout_total,
                 _prev_velocity=st._prev_velocity,
                 _prev_vel_time=st._prev_vel_time,
             )
