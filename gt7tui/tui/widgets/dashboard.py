@@ -675,9 +675,14 @@ class HVBatteryBlock(Static):
     def render_block(self, frame: TelemetryFrame | None):
         if not frame or frame.energy_recovery is None:
             return _panel(Text("No HV data (needs ~ heartbeat)", style="dim"), title="HV Battery", border_style="green")
-        # Use motor_assist (0x154) as the battery arrow indicator; EnergyRecovery
-        # (0x150) is sometimes flat even when the HUD shows assist arrows.
-        if frame.motor_assist is not None:
+        # GT7 HUD battery arrows:
+        # - unk4 (0x13F) == 1 : EnergyRecovery (0x150) is the real assist value
+        #   (e.g. FXX cuts assist at 300 km/h -> ER drops to 0).
+        # - unk4 == 0 : ER is not broadcast; motor_assist (0x154) tracks the HUD
+        #   arrows instead (e.g. NSX).
+        if frame.energy_recovery_flag == 1 and frame.energy_recovery is not None:
+            er = max(-1.0, min(1.0, frame.energy_recovery))
+        elif frame.motor_assist is not None:
             er = max(-1.0, min(1.0, frame.motor_assist))
         elif frame.energy_recovery is not None:
             er = max(-1.0, min(1.0, frame.energy_recovery))
