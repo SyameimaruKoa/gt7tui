@@ -57,19 +57,6 @@ class GT7App(App):
     DashboardPane > Horizontal > Vertical > Horizontal {
         height: auto;
     }
-    /* Gear cluster: keep label and digits on one line, never wrap vertically */
-    DashboardPane .gear-cluster {
-        width: 12;
-        height: auto;
-    }
-    DashboardPane .gear-cluster .title {
-        width: 100%;
-        text-wrap: nowrap;
-    }
-    DashboardPane .gear-cluster Digits {
-        width: 100%;
-        height: 3;
-    }
     DashboardPane RpmBlock, DashboardPane SpeedBlock {
         height: auto;
         width: 1fr;
@@ -79,6 +66,16 @@ class GT7App(App):
     }
     .compact DashboardPane .wide-only {
         display: none;
+    }
+    /* On narrow (phone) screens stack the gauges and give each full width so
+       labels and scale numbers never wrap into unreadable fragments. */
+    .compact DashboardPane > Horizontal > Vertical:first-child > Horizontal:first-child {
+        layout: vertical;
+        height: auto;
+    }
+    .compact DashboardPane RpmBlock, .compact DashboardPane SpeedBlock {
+        width: 100%;
+        height: auto;
     }
     .wide DashboardPane .wide-only {
         display: block;

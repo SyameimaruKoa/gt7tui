@@ -268,16 +268,17 @@ def _analog_bar(value: float, max_value: float, width: int, color: str, ticks: l
 
 
 class RpmBlock(Static):
-    def render_block(self, frame: TelemetryFrame | None, snap: RuntimeState, cfg: AppConfig):
+    def render_block(self, frame: TelemetryFrame | None, snap: RuntimeState, cfg: AppConfig, compact: bool = False):
         thr = cfg.thresholds.get("rpm", {})
         colors = cfg.colors.get("rpm", {})
         c_norm = colors.get("normal", "green")
         c_warn = colors.get("warn", "yellow")
         c_lim = colors.get("limit", "red")
 
+        gw = 14 if compact else 24
         if not frame:
-            gauge = _linear_gauge(0, 8000, width=24, color=c_norm, label="0 rpm")
-            info = Text(" shift ----   dial ----   scale 0-8000", style="grey70")
+            gauge = _linear_gauge(0, 8000, width=gw, color=c_norm, label="" if compact else "0 rpm")
+            info = Text(" S---- D---- 0-8k", style="grey70") if compact else Text(" shift ----  dial ----  scale 0-8000", style="grey70")
             return _panel(Group(gauge, info), title="Tachometer", border_style="cyan")
 
         shift = float(frame.rev_warning or 0)   # engine max rev / shift point
@@ -295,30 +296,31 @@ class RpmBlock(Static):
             scale_max = math.ceil(frame.rpm / 500.0) * 500.0
 
         gauge = _linear_gauge(
-            frame.rpm, scale_max, width=24,
+            frame.rpm, scale_max, width=gw,
             color=c_norm, warn=shift if shift > 0 else None,
             limit=dial if dial > 0 and dial < scale_max else None,
             warn_color=c_warn, limit_color=c_lim,
-            label=f"{frame.rpm:5.0f} rpm"
+            label="" if compact else f"{frame.rpm:5.0f} rpm"
         )
         shift_txt = f"{shift:4.0f}" if shift > 0 else "----"
         dial_txt = f"{dial:4.0f}" if dial > 0 else "----"
-        info = Text(f" shift {shift_txt}   dial {dial_txt}   scale 0-{int(scale_max)}", style="grey70")
+        info = (Text(f" {frame.rpm:5.0f}rpm S{shift_txt} D{dial_txt}", style="grey70") if compact
+                else Text(f" shift {shift_txt}  dial {dial_txt}  scale 0-{int(scale_max)}", style="grey70"))
         return _panel(Group(gauge, info), title="Tachometer", border_style="cyan")
 
 
 class SpeedBlock(Static):
-    def render_block(self, frame: TelemetryFrame | None, cfg: AppConfig):
+    def render_block(self, frame: TelemetryFrame | None, cfg: AppConfig, compact: bool = False):
         speed = frame.speed_kph if frame else 0.0
         top = 320.0
         if frame and frame.est_top_speed and frame.est_top_speed > 0:
             top = max(200.0, min(450.0, float(frame.est_top_speed) * 1.1))
-        gauge = _linear_gauge(speed, top, width=20, color="bright_cyan", label=f"{speed:5.1f} km/h")
+        gauge = _linear_gauge(speed, top, width=14 if compact else 20, color="bright_cyan", label="" if compact else f"{speed:.0f} km/h")
         lines = [gauge]
         if frame and frame.est_top_speed and frame.est_top_speed > 0:
             # bar showing speed vs estimated top speed
             topv = float(frame.est_top_speed)
-            topg = _linear_gauge(speed, topv, width=20, color="bright_blue", label=f"{speed / topv * 100.0:3.0f}%")
+            topg = _linear_gauge(speed, topv, width=14 if compact else 20, color="bright_blue", label="" if compact else f"{speed / topv * 100.0:3.0f}%")
             lines.append(Text(f" of est.max {topv} km/h", style="grey70"))
             lines.append(topg)
         return _panel(Group(*lines), title="Speedometer", border_style="bright_cyan")
@@ -379,6 +381,7 @@ class LapBlock(Static):
     def render_block(self, frame: TelemetryFrame | None, snap: RuntimeState, cfg: AppConfig):
         table = Table.grid(padding=(0, 1))
         if not frame:
+            table.add_row("Gear -")
             table.add_row("Lap: -/-  Pos: -/-")
             table.add_row("Current: --:--.---")
             table.add_row("Best:    --:--.---")
@@ -389,6 +392,13 @@ class LapBlock(Static):
         lap_tot = str(frame.total_laps) if frame.total_laps >= 0 else "--"
         pos_cur = str(frame.position) if frame.position >= 0 else "--"
         pos_tot = str(frame.total_positions) if frame.total_positions >= 0 else "--"
+        gear_txt = _gear_text(frame.gear)
+        sug = frame.suggested_gear
+        sug_txt = _gear_text(sug) if sug <= 14 else "-"
+        gear_info = Text.assemble(("Gear ", "grey70"), (gear_txt, "bold white"))
+        if sug_txt != "-" and sug != frame.gear and sug > 0:
+            gear_info.append(Text.assemble(("  Sug ", "grey70"), (sug_txt, "bold yellow")))
+        table.add_row(gear_info)
         table.add_row(f"Lap: {lap_cur}/{lap_tot}  Pos: {pos_cur}/{pos_tot}")
         cur = snap.current_lap_time_s if frame.current_lap > 0 else 0.0
         table.add_row(f"Current: {_fmt_lap_s(cur) if frame.current_lap > 0 else '--:--.---'}")
@@ -708,7 +718,34 @@ class GSensorBlock(Static):
         vb.append(f"  pk L{self._peak_lat:.0f} F{self._peak_lng:.0f}", style="grey50")
         vb.append(f"  [{source}]", style="grey50")
 
-        return _panel(Group(out, vb), title="G", border_style="bright_yellow")
+        # Steering input - part of vehicle behaviour
+        st = Text()
+        if frame and frame.wheel_rotation_rad is not None:
+            angle = frame.wheel_rotation_rad
+            rate = frame.steering_rate or 0.0
+            st.append(" STR ", style="grey70")
+            # horizontal angle bar, center = straight
+            sw = 15
+            smid = sw // 2
+            sratio = max(-1.0, min(1.0, angle / 3.14))
+            spos = smid + int(round(sratio * (smid - 1)))
+            spos = max(0, min(sw - 1, spos))
+            st.append("[", style="grey50")
+            for i in range(sw):
+                if i == spos:
+                    st.append("●", style="bold bright_green")
+                elif i == smid:
+                    st.append("┼", style="white")
+                elif (smid < i <= spos) or (spos <= i < smid):
+                    st.append("━", style="bright_green")
+                else:
+                    st.append("·", style="grey30")
+            st.append("]", style="grey50")
+            st.append(f" {angle:+.2f}rad  {rate:+.1f}rad/s", style="bright_green")
+        else:
+            st.append(" STR -- (no extended data)", style="grey50")
+
+        return _panel(Group(out, vb, st), title="G / Vehicle", border_style="bright_yellow")
 
 
 class LayoutStatsBlock(Static):
@@ -791,8 +828,8 @@ class HVBatteryBlock(Static):
                 bt.append(f"[{i}] ", style="grey50")
                 bt.append(f"{v:+.2f}", style="bold bright_cyan")
                 bt.append("  ", style="")
-            bt.append(f" sum {sum(vals):+.2f}", style="grey70")
             g.add_row(bt)
+            g.add_row(Text(f"  MTR sum {sum(vals):+.2f}", style="grey70"))
         if frame.engine_output is not None:
             g.add_row(Text(f"  ENG {frame.engine_output:+.2f}", style="grey70"))
         return _panel(g, title="HV Battery", border_style="green")
@@ -802,8 +839,6 @@ class DashboardPane(Container):
     def __init__(self, config: AppConfig, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.config = config
-        self.gear_digits = Static("N")
-        self.gear_info = Static("", classes="title")
         self.rpm_block = RpmBlock()
         self.speed_block = SpeedBlock()
         self.pedals_block = PedalsBlock()
@@ -822,12 +857,7 @@ class DashboardPane(Container):
                 with Horizontal():
                     yield self.rpm_block
                     yield self.speed_block
-                with Horizontal():
-                    with Vertical(classes="gear-cluster"):
-                        yield Static("GEAR", classes="title")
-                        yield self.gear_digits
-                        yield self.gear_info
-                    yield self.lap_block
+                yield self.lap_block
                 yield self.session_block
                 yield self.layout_stats
             with Vertical(classes="wide-right"):
@@ -841,20 +871,8 @@ class DashboardPane(Container):
     def update_view(self, snap: RuntimeState, cfg: AppConfig, layout: str = "wide") -> None:
         compact = layout == "compact"
         frame = snap.frame
-        if frame:
-            gear = _gear_text(frame.gear)
-            self.gear_digits.update(gear)
-            sug = frame.suggested_gear
-            sug_text = _gear_text(sug) if sug <= 14 else "-"
-            info = Text(f"Suggested: {sug_text}")
-            if sug_text != "-" and sug_text != gear and sug > 0 and sug != frame.gear:
-                info.stylize("bold yellow")
-            self.gear_info.update(info)
-        else:
-            self.gear_digits.update("N")
-            self.gear_info.update("Suggested: -")
-        self.rpm_block.update(self.rpm_block.render_block(frame, snap, cfg))
-        self.speed_block.update(self.speed_block.render_block(frame, cfg))
+        self.rpm_block.update(self.rpm_block.render_block(frame, snap, cfg, compact=compact))
+        self.speed_block.update(self.speed_block.render_block(frame, cfg, compact=compact))
         self.pedals_block.update(self.pedals_block.render_block(frame, cfg))
         self.lap_block.update(self.lap_block.render_block(frame, snap, cfg))
         self.vehicle_block.update(self.vehicle_block.render_block(frame, snap, cfg, compact=compact))
