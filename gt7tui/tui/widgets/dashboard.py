@@ -675,12 +675,16 @@ class HVBatteryBlock(Static):
     def render_block(self, frame: TelemetryFrame | None):
         if not frame or frame.energy_recovery is None:
             return _panel(Text("No HV data (needs ~ heartbeat)", style="dim"), title="HV Battery", border_style="green")
-        if frame.energy_recovery_flag == 0:
+        # Use motor_assist (0x154) as the battery arrow indicator; EnergyRecovery
+        # (0x150) is sometimes flat even when the HUD shows assist arrows.
+        if frame.motor_assist is not None:
+            er = max(-1.0, min(1.0, frame.motor_assist))
+        elif frame.energy_recovery is not None:
+            er = max(-1.0, min(1.0, frame.energy_recovery))
+        else:
             g = Table.grid(padding=(0, 0))
-            g.add_row(Text("No energy recovery data", style="dim"))
-            g.add_row(Text("(car does not send ER)", style="grey50"))
+            g.add_row(Text("No HV data", style="dim"))
             return _panel(g, title="HV Battery", border_style="green")
-        er = max(-1.0, min(1.0, frame.energy_recovery))
         # center meter: left=regen(charge), right=assist(discharge)
         w = 21
         mid = w // 2
