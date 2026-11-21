@@ -1,26 +1,24 @@
 # gt7tui
 
-Visual TUI frontend for Gran Turismo 7 telemetry (PS4).  
+Visual TUI frontend for Gran Turismo 7 telemetry (PS4).
 Receives GT7 UDP telemetry, decodes packets (Salsa20 + struct offsets), and displays gauges/meters in a terminal UI using Textual.
 
-> Target: **GT7 on PS4** (same LAN). Packet decode logic is based on [Bornhall/gt7telemetry](https://github.com/Bornhall/gt7telemetry).
+> Target: **GT7 on PS4** (same LAN). Packet decode logic is based on [Bornhall/gt7telemetry](https://github.com/Bornhall/gt7telemetry) and community research (PDTools issue #14).
 
 ## Features
-- Live mode (`--live <PS4_IP>`), replay mode (`--replay <file>`), and demo mode (`--demo`)
-- Record all UDP communication during live mode (`--record <file>`) for offline verification (received telemetry and sent heartbeats, with timestamps and direction)
-- Visual dashboard: RPM bar gauge with rev warning/limiter zones, large gear/speed, throttle/brake/clutch bars
-- Tyre view: 4-wheel layout, temperature heat indication, slip indicator, suspension/speed/diameter
-- Lap/timing: current/best/last and delta (bar/color when comparable)
-- Detail view: position/velocity/rotation/angular velocity, gearing, flags/unknown fields
-- 3-tab UI for small terminals (Termux): Dashboard / Tyres / Detail
-- Optional JSON config (`gt7tui.json`) for colors, thresholds (category-level), layout/refresh, and item visibility
+- Modes: `--live <PS4_IP>`, `--replay <file>`, `--demo` (no PS4 needed)
+- `--record <file>` saves all UDP communication (telemetry + heartbeats, timestamps + direction) as `*.gt7cap` v2
+- Heartbeat types selectable: `A` (0x128), `B` (0x13C), `~` (0x158, default) — each has a different XOR key and packet size
+- Dashboard: tachometer (rev-limiter scale), speedometer, pedals with TCS/ABS intervention, lap/timing, drive-layout statistics, tyres, HV battery, 2D G map + steering
+- Detail: session, gearing (9/10-speed aware), dynamics, flags with names, identified vs unknown fields
+- Responsive layout: wide (2 columns 1:2), compact (2 columns 1:1), tiny (<80 cols, single column)
+- Config: `gt7tui.json` for thresholds, colors, heartbeat, and per-car drive layouts
+- Keyboard: `q` quit, `r` reconnect, `1/2/3` tabs, `?` help
 
 ## Requirements
 - Python **3.11+**
-- Network: PS4 and this device on the same reachable network (UDP)
-  - Receive: UDP `33740` (default)
-  - Heartbeat to PS4: UDP `33739` (default)
-- Dependencies: `pycryptodome`, `textual` (install in a virtual environment)
+- PS4 and this device on the same LAN (UDP receive `33740`, heartbeat to `33739`)
+- Dependencies: `pycryptodome`, `textual`
 
 ## Setup
 ```bash
@@ -30,7 +28,6 @@ source .venv/bin/activate
 pip install -U pip
 pip install -e .
 ```
-
 ```powershell
 # Windows (PowerShell)
 py -3.11 -m venv .venv
@@ -39,64 +36,64 @@ python -m pip install -U pip
 pip install -e .
 ```
 
-Termux notes:
-- Install Python and build tools as needed for `pycryptodome` (e.g. `pkg install python clang`), then install in venv.
-- Terminal size/color support varies; use Dashboard/Tyres/Detail tabs.
-- Keep device awake and on the same Wi-Fi network as PS4.
-
 ## Usage
 ```bash
-# Show help (also shown with no arguments)
-python -m gt7tui -h
-python -m gt7tui
-
-# Live telemetry from PS4
-python -m gt7tui --live 192.168.1.50
-
-# Live telemetry + record all UDP communication for verification
-python -m gt7tui --live 192.168.1.50 --record captures/race.gt7cap
-
-# Replay a recorded capture
+python -m gt7tui -h                      # help (also with no args)
+python -m gt7tui --live 192.168.55.253
+python -m gt7tui --live 192.168.55.253 --record captures/race.gt7cap
 python -m gt7tui --replay captures/race.gt7cap
-python -m gt7tui --replay captures/race.gt7cap --speed 2.0
-
-# Demo mode (no PS4/network required)
+python -m gt7tui --replay captures/race.gt7cap --speed 4.0
 python -m gt7tui --demo
 ```
 
 Options:
-- `--record <file>` record all UDP communication in live mode (received telemetry + sent heartbeats)
-- `--speed <factor>` replay speed multiplier (default `1.0`)
-- `--bind <addr>` (default `0.0.0.0`)
-- `--recv-port <port>` (default `33740`)
-- `--send-port <port>` (default `33739`)
-- `--timeout <sec>` (default `10.0`)
-- `--refresh-hz <hz>` (default `20.0`)
-- `--version`
+- `--heartbeat {A,B,~}` heartbeat type (default `~`; `~` = 0x158 extended packet)
+- `--record FILE` record raw UDP (live only)
+- `--speed FACTOR` replay speed multiplier
+- `--bind`, `--recv-port`, `--send-port`, `--timeout`, `--refresh-hz`, `--version`
 
-In-app keys:
-- `q`: quit
-- `r`: reconnect (live)
-- `1`/`2`/`3`: switch Dashboard/Tyres/Detail
-- `?`: help panel
+Helper scripts:
+- `./scripts/run_gt7tui.sh --live <PS4_IP>` (or `--demo`, `-h`)
+- `.\scripts\run_gt7tui.ps1 -Live <PS4_IP>` (or `-Demo`, `-h` / `Get-Help`)
 
-## Helper scripts
-- Linux/Termux: `./scripts/run_gt7tui.sh --live <PS4_IP>` or `./scripts/run_gt7tui.sh --demo` (`-h/--help` supported)
-- Windows PowerShell: `.\scripts\run_gt7tui.ps1 -Live <PS4_IP>` or `.\scripts\run_gt7tui.ps1 -Demo` (`-h` / `--help` / `Get-Help` supported)
+## Captures
+`*.gt7cap` v2 format: `GT7TCAP\0` + version 2 header, then records of
+`timestamp(float64)`, `length(uint32)`, `direction(uint8)`, `port(uint16)`, `reserved(uint8)` + raw payload.
+Direction 0 = received telemetry, 1 = sent heartbeat. Replay auto-detects the heartbeat decryption key.
+
+## Telemetry fields
+Base packet (0x128): speed, RPM, pedals, gear, tyres (temp/radius/angular velocity/suspension), road plane, lap times, position, flags.
+Extended packet (`~`, 0x158) adds:
+- 0x128 steering angle (rad), 0x12C steering rate (rad/s)
+- 0x130/134/138 sway/heave/surge (vehicle motion)
+- 0x13C/13D physical throttle/brake outputs, 0x13E car type, 0x13F energy-recovery flag
+- 0x140-14C individual motor outputs (some cars)
+- 0x150 motor assist (1 = MAX), 0x154 engine output
+
+Flags:
+- `0x8E`: Night/Day (0x80), Handbrake (0x40), RevLimit (0x20), ClutchOff (0x10), Loading (0x04), Paused (0x02), Racing (0x01)
+- `0x8F`: TCS (0x08), ASM (0x04), LowBeam (0x02), HighBeam (0x01)
+
+Notes:
+- The tachometer ceiling is the rev-limiter number engraved on GT7's tachometer. Shift point uses `rev_warning`.
+- HEV battery SOC itself is not broadcast; the `HV Battery` panel shows motor-assist/regen flow (0x150) and individual motor outputs.
+- Drive layout is stored per car (see config) and overrides slip-based detection; some AWD cars only drive the second axle at low speed.
 
 ## Configuration
-Optional fixed-path config file: `./gt7tui.json` (if absent, defaults are used).  
-Priority: `defaults < gt7tui.json < CLI options` (no `--config` option).
-
-Configurable areas (category-level):
-- `colors`: rpm/tyre_temp/fuel/slip/delta/pedal/status
-- `thresholds`: rpm, tyre_temp, fuel, slip, delta, boost
-- `ui.refresh_hz`, `ui.layout`, `ui.show` (dashboard/tyres/detail)
-- `network`: bind/recv_port/send_port/timeout/heartbeat_interval_packets
-
-Example:
+Optional fixed-path `./gt7tui.json`; priority `defaults < file < CLI`.
 ```json
 {
+  "network": {
+    "heartbeat": "~",
+    "drive_layouts": {
+      "3572": "AWD",
+      "1537": "FWD",
+      "3568": "FWD",
+      "3561": "FWD",
+      "3219": "RWD",
+      "2120": "AWD"
+    }
+  },
   "ui": {
     "refresh_hz": 20.0,
     "show": { "dashboard": true, "tyres": true, "detail": true }
@@ -105,21 +102,15 @@ Example:
     "tyre_temp": { "cold": 60.0, "optimal_min": 80.0, "optimal_max": 100.0, "hot": 110.0 },
     "fuel": { "low_percent": 15.0 },
     "slip": { "warn_ratio": 1.10 }
-  }
+  },
+  "colors": { }
 }
 ```
 
-Notes:
-- Rev warning/limiter are taken from packet values when available.
-- Non-packet thresholds (tyre temperature bands, low fuel/charge %, slip warning, etc.) use built-in defaults and can be adjusted in `gt7tui.json`.
-
 ## Troubleshooting
-- **No data / WAIT**: verify PS4 IP, same network, GT7 running on track, and UDP reachability.
-- **Firewall**: allow inbound UDP `33740` and outbound UDP `33739` on the receiving device/OS.
-- **Windows**: Windows Terminal recommended for better rendering.
-- **Termux/Haven**: environment differences may affect terminal rendering and dependency installation.
+- **WAIT / no data**: check PS4 IP, same LAN, GT7 on track, UDP 33740/33739 reachability.
+- **Extended fields empty**: use `--heartbeat ~` (default) when recording/live; `A` packets lack extensions.
+- **Small terminal**: layout switches automatically; below 80 columns panels stack in one scrollable column.
 
-## License and attribution
-- Licensed under **GPL-3.0-or-later** (see `LICENSE`).
-- Telemetry packet structure/decode approach references [Bornhall/gt7telemetry](https://github.com/Bornhall/gt7telemetry) (GPL-3.0) and related GT7 telemetry research by the community.
-
+## License
+GPL-3.0-or-later. See `LICENSE`.
