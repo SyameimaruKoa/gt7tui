@@ -591,6 +591,8 @@ class TyreSummaryBlock(Static):
 
         order = ("FL", "FR", "RL", "RR")
         roles = tyre_roles(frame, snap.g_lateral, snap.g_longitudinal)
+        slip_th = float(cfg.thresholds.get("slip", {}).get("warn_ratio", 1.10))
+        slip_colors = cfg.colors.get("slip", {})
         for key in order:
             w = frame.tyres.get(key)
             if not w:
@@ -599,10 +601,23 @@ class TyreSummaryBlock(Static):
             tcol = temp_style(w.temp_c)
             role = roles.get(key, "")
             rstyle = "bold green" if "DRV" in role or "GRIP" in role else ("bold red" if "BRK" in role else "grey70")
+            if w.slip_ratio is not None:
+                sv = w.slip_ratio
+                scol = slip_colors.get("high", "red") if sv >= slip_th + 0.1 else (slip_colors.get("warn", "yellow") if sv >= slip_th else slip_colors.get("normal", "green"))
+                slip_txt = f"{sv:4.2f}" if sv < 10 else "HIGH"
+            else:
+                scol, slip_txt = "grey50", "  --"
+            # suspension relative to nominal 0.25m (see _suspension_gauge)
+            susp_dev = w.suspension - 0.25
+            susstyle = "bright_magenta" if abs(susp_dev) < 0.08 else "bold bright_magenta"
             g.add_row(Text.assemble(
-                (f"{key}  ", "bold white"),
+                (f"{key} ", "bold white"),
                 (f"{w.temp_c:6.1f}°C", f"bold {tcol}"),
-                ("  ", "grey50"), (f"{role:>12}", rstyle),
+                (" slip ", "grey50"), (f"{slip_txt:>4}", scol),
+                (" spd ", "grey50"), (f"{w.speed_kph:6.1f}", "bright_cyan"),
+                (" dia ", "grey50"), (f"{w.diameter_m * 200.0:5.1f}", "bright_blue"),
+                (" susp ", "grey50"), (f"{susp_dev:+.3f}", susstyle),
+                ("  ", "grey50"), (f"{role:>9}", rstyle),
             ))
         g.add_row(Text.assemble(("Layout ", "grey70"), (drivetrain_layout(frame), "bold cyan")))
         return _panel(g, title="Tyres", border_style="blue")
