@@ -136,8 +136,9 @@ def decode_packet(d: bytes) -> TelemetryFrame:
     frame.is_ev = frame.fuel_capacity <= 0
 
     boost_raw = _f(d, 0x50)
-    frame.boost_kpa = _safe_float(boost_raw - 1.0)
-    frame.has_turbo = frame.boost_kpa > -1.0
+    # 0x50 is absolute pressure in bar (1.0 = ambient). Convert gauge pressure to kPa.
+    frame.boost_kpa = _safe_float((boost_raw - 1.0) * 100.0)
+    frame.has_turbo = frame.boost_kpa > -100.0
 
     frame.clutch = _safe_float(_f(d, 0xF4))
     frame.clutch_engaged = _safe_float(_f(d, 0xF8))

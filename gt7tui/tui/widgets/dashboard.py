@@ -444,20 +444,11 @@ class VehicleBlock(Static):
         unit = "kWh" if frame.is_ev else "L"
         g.add_row(_mini_gauge(label, pct, 100.0, "%", fuel_color, width=14 if compact else 18))
         g.add_row(Text(f"       {cur:5.1f}/{cap:5.1f} {unit}", style="grey70"))
-        # boost
-        if frame.has_turbo:
-            max_boost = float(cfg.thresholds.get("boost", {}).get("max_kpa", 200.0))
-            bval = max(0.0, frame.boost_kpa)
-            g.add_row(_mini_gauge("BOOST", bval, max(1.0, max_boost), "k", "cyan", width=14 if compact else 18))
-            g.add_row(Text(f"       {frame.boost_kpa:6.1f} kPa", style="grey70"))
-        else:
-            g.add_row(_mini_gauge("BOOST", 0, 1, "", "grey35", width=14 if compact else 18))
-            g.add_row(Text("       N/A", style="grey50"))
         # temps & pressure as analog bars
         g.add_row(_mini_gauge("OIL T", frame.oil_temp_c, 150.0, "°", "orange3", width=14 if compact else 18))
         g.add_row(_mini_gauge("WATER", frame.water_temp_c, 130.0, "°", "dodger_blue2", width=14 if compact else 18))
         g.add_row(_mini_gauge("OIL P", frame.oil_pressure_bar, 10.0, "b", "yellow3", width=14 if compact else 18))
-        g.add_row(Text(f" RH {frame.ride_height_mm:5.0f} mm", style="grey70"))
+        g.add_row(Text(f"RH {frame.ride_height_mm:5.0f} mm", style="grey70"))
         return _panel(g, title="Vehicle", border_style="yellow")
 
 
@@ -471,8 +462,6 @@ class SessionBlock(Static):
         g.add_row(Text.assemble(("Lap ", "grey70"), (f"{max(0, frame.current_lap)}/{max(0, frame.total_laps)}", "white"), ("  Pos ", "grey70"), (f"{max(0, frame.position)}/{max(0, frame.total_positions)}", "white")))
         g.add_row(Text.assemble(("Time ", "grey70"), (f"{frame.time_on_track_ms/1000.0:,.1f}s", "white")))
         g.add_row(Text.assemble(("Best ", "grey70"), (_fmt_lap(frame.best_lap_ms), "green"), ("  Last ", "grey70"), (_fmt_lap(frame.last_lap_ms), "yellow")))
-        boost = f"{frame.boost_kpa:+.1f}kPa" if frame.has_turbo else "N/A"
-        g.add_row(Text.assemble(("Boost ", "grey70"), (boost, "cyan" if frame.has_turbo else "grey50"), ("  RH ", "grey70"), (f"{frame.ride_height_mm:.0f}mm", "white")))
         return _panel(g, title="Session", border_style="blue")
 
 
@@ -515,6 +504,27 @@ class DynamicsBlock(Static):
         g.add_row(cm("R", frame.angular_velocity_xyz.z, 5.0, "orange3"))
         g.add_row(Text.assemble(("N/S ", "grey70"), (f"{frame.north_south:+.3f}", "white")))
         return _panel(g, title="Dynamics", border_style="green")
+
+
+class BoostBlock(Static):
+    """Dedicated boost / supercharger pressure gauge."""
+
+    def render_block(self, frame: TelemetryFrame | None, cfg: AppConfig):
+        if not frame or not frame.has_turbo:
+            return _panel(Text("N/A (no turbo)", style="grey50"), title="Boost", border_style="cyan")
+        max_kpa = float(cfg.thresholds.get("boost", {}).get("max_kpa", 200.0))
+        if max_kpa <= 0:
+            max_kpa = 200.0
+        val = max(0.0, frame.boost_kpa)
+        gauge = _linear_gauge(
+            val, max_kpa, width=31, color="cyan",
+            label=f"{frame.boost_kpa:+7.1f} kPa"
+        )
+        info = Text(
+            f" scale 0-{int(max_kpa)} kPa   {frame.boost_kpa / 100.0:+.2f} bar",
+            style="grey70",
+        )
+        return _panel(Group(gauge, info), title="Boost", border_style="cyan")
 
 
 class TyreSummaryBlock(Static):
@@ -578,6 +588,7 @@ class DashboardPane(Container):
         self.vehicle_block = VehicleBlock()
         self.session_block = SessionBlock(classes="wide-only")
         self.tyre_summary = TyreSummaryBlock(classes="wide-only")
+        self.boost_block = BoostBlock()
 
     def compose(self) -> ComposeResult:
         with Horizontal():
@@ -595,6 +606,7 @@ class DashboardPane(Container):
             with Vertical():
                 yield self.pedals_block
                 yield self.vehicle_block
+                yield self.boost_block
                 yield self.tyre_summary
 
     def update_view(self, snap: RuntimeState, cfg: AppConfig, layout: str = "wide") -> None:
@@ -619,3 +631,4 @@ class DashboardPane(Container):
         self.vehicle_block.update(self.vehicle_block.render_block(frame, cfg, compact=compact))
         self.session_block.update(self.session_block.render_block(frame, snap, cfg))
         self.tyre_summary.update(self.tyre_summary.render_block(frame, cfg))
+        self.boost_block.update(self.boost_block.render_block(frame, cfg))
