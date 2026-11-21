@@ -38,14 +38,24 @@ class GT7App(App):
     .title {
         text-style: bold;
     }
-    #dashboard-root {
+    #dashboard-root, #tyres-root, #detail-root {
         height: 1fr;
     }
-    #tyres-root {
+    DashboardPane > Horizontal {
         height: 1fr;
     }
-    #detail-root {
+    DashboardPane > Horizontal > Vertical {
         height: 1fr;
+        width: 1fr;
+    }
+    DashboardPane RpmBlock, DashboardPane SpeedBlock, DashboardPane PedalsBlock, DashboardPane LapBlock, DashboardPane VehicleBlock, DashboardPane SessionBlock, DashboardPane DynamicsBlock {
+        height: auto;
+    }
+    .compact DashboardPane .wide-only {
+        display: none;
+    }
+    .wide DashboardPane .wide-only {
+        display: block;
     }
     """
 
@@ -138,12 +148,29 @@ class GT7App(App):
             self.replay.stop()
             self.replay = None
 
+    def _layout_mode(self) -> str:
+        w = self.size.width
+        h = self.size.height
+        if w < 110 or h < 32:
+            return "compact"
+        return "wide"
+
+    def _apply_layout_mode(self) -> str:
+        mode = self._layout_mode()
+        self.screen.set_class(mode == "compact", "compact")
+        self.screen.set_class(mode == "wide", "wide")
+        return mode
+
+    def on_resize(self, event) -> None:
+        self._apply_layout_mode()
+
     def _tick(self) -> None:
+        layout = self._apply_layout_mode()
         snap = self.store.snapshot()
         if self.status_bar:
             self.status_bar.update_view(snap, self.config)
         if self.dashboard:
-            self.dashboard.update_view(snap, self.config)
+            self.dashboard.update_view(snap, self.config, layout=layout)
         if self.tyres:
             self.tyres.update_view(snap, self.config)
         if self.detail:

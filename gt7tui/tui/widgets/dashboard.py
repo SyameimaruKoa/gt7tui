@@ -380,7 +380,7 @@ def _mini_gauge(label: str, value: float, max_value: float, unit: str, color: st
 
 
 class VehicleBlock(Static):
-    def render_block(self, frame: TelemetryFrame | None, cfg: AppConfig):
+    def render_block(self, frame: TelemetryFrame | None, cfg: AppConfig, compact: bool = False):
         if not frame:
             return Panel("No data", title="Vehicle", border_style="yellow")
         g = Table.grid(padding=(0, 0))
@@ -392,23 +392,79 @@ class VehicleBlock(Static):
         fuel_color = cfg.colors.get("fuel", {}).get("low" if pct <= low_pct else "normal", "green")
         label = "BAT" if frame.is_ev else "FUEL"
         unit = "kWh" if frame.is_ev else "L"
-        g.add_row(_mini_gauge(label, pct, 100.0, "%", fuel_color))
+        g.add_row(_mini_gauge(label, pct, 100.0, "%", fuel_color, width=14 if compact else 18))
         g.add_row(Text(f"       {cur:5.1f}/{cap:5.1f} {unit}", style="grey70"))
         # boost
         if frame.has_turbo:
             max_boost = float(cfg.thresholds.get("boost", {}).get("max_kpa", 200.0))
             bval = max(0.0, frame.boost_kpa)
-            g.add_row(_mini_gauge("BOOST", bval, max(1.0, max_boost), "k", "cyan"))
+            g.add_row(_mini_gauge("BOOST", bval, max(1.0, max_boost), "k", "cyan", width=14 if compact else 18))
             g.add_row(Text(f"       {frame.boost_kpa:6.1f} kPa", style="grey70"))
         else:
-            g.add_row(_mini_gauge("BOOST", 0, 1, "", "grey35"))
+            g.add_row(_mini_gauge("BOOST", 0, 1, "", "grey35", width=14 if compact else 18))
             g.add_row(Text("       N/A", style="grey50"))
         # temps & pressure as analog bars
-        g.add_row(_mini_gauge("OIL T", frame.oil_temp_c, 150.0, "°", "orange3"))
-        g.add_row(_mini_gauge("WATER", frame.water_temp_c, 130.0, "°", "dodger_blue2"))
-        g.add_row(_mini_gauge("OIL P", frame.oil_pressure_bar, 10.0, "b", "yellow3"))
+        g.add_row(_mini_gauge("OIL T", frame.oil_temp_c, 150.0, "°", "orange3", width=14 if compact else 18))
+        g.add_row(_mini_gauge("WATER", frame.water_temp_c, 130.0, "°", "dodger_blue2", width=14 if compact else 18))
+        g.add_row(_mini_gauge("OIL P", frame.oil_pressure_bar, 10.0, "b", "yellow3", width=14 if compact else 18))
         g.add_row(Text(f" RH {frame.ride_height_mm:5.0f} mm", style="grey70"))
         return Panel(g, title="Vehicle", border_style="yellow")
+
+
+class SessionBlock(Static):
+    def render_block(self, frame: TelemetryFrame | None, snap: RuntimeState, cfg: AppConfig):
+        g = Table.grid(padding=(0, 1))
+        if not frame:
+            g.add_row(Text("No telemetry", style="dim"))
+            return Panel(g, title="Session", border_style="blue")
+        g.add_row(Text.assemble(("Car ", "grey70"), (str(frame.car_id), "bold white"), ("  Pkt ", "grey70"), (str(frame.packet_id), "cyan")))
+        g.add_row(Text.assemble(("Lap ", "grey70"), (f"{max(0, frame.current_lap)}/{max(0, frame.total_laps)}", "white"), ("  Pos ", "grey70"), (f"{max(0, frame.position)}/{max(0, frame.total_positions)}", "white")))
+        g.add_row(Text.assemble(("Time ", "grey70"), (f"{frame.time_on_track_ms/1000.0:,.1f}s", "white")))
+        g.add_row(Text.assemble(("Best ", "grey70"), (_fmt_lap(frame.best_lap_ms), "green"), ("  Last ", "grey70"), (_fmt_lap(frame.last_lap_ms), "yellow")))
+        boost = f"{frame.boost_kpa:+.1f}kPa" if frame.has_turbo else "N/A"
+        g.add_row(Text.assemble(("Boost ", "grey70"), (boost, "cyan" if frame.has_turbo else "grey50"), ("  RH ", "grey70"), (f"{frame.ride_height_mm:.0f}mm", "white")))
+        return Panel(g, title="Session", border_style="blue")
+
+
+class DynamicsBlock(Static):
+    def render_block(self, frame: TelemetryFrame | None):
+        g = Table.grid(padding=(0, 1))
+        if not frame:
+            g.add_row(Text("No data", style="dim"))
+            return Panel(g, title="Dynamics", border_style="green")
+        vmax = 120.0
+        def cm(label, v, lim, color):
+            lim = max(1e-6, lim)
+            ratio = max(-1.0, min(1.0, v / lim))
+            w = 15
+            mid = w // 2
+            pos = mid + int(round(ratio * (mid - 1)))
+            pos = max(0, min(w - 1, pos))
+            t = Text()
+            t.append(f"{label:<2}")
+            t.append("[", style="grey50")
+            for i in range(w):
+                if i == pos:
+                    t.append("◆", style=f"bold {color}")
+                elif i == mid:
+                    t.append("┼", style="white")
+                elif (mid < i <= pos) or (pos <= i < mid):
+                    t.append("━", style=color)
+                else:
+                    t.append("·", style="grey30")
+            t.append("]", style="grey50")
+            t.append(f"{v:+7.1f}")
+            return t
+        g.add_row(Text("Velocity m/s", style="bold grey70"))
+        g.add_row(cm("X", frame.velocity_xyz.x, vmax, "cyan"))
+        g.add_row(cm("Y", frame.velocity_xyz.y, 40.0, "cyan"))
+        g.add_row(cm("Z", frame.velocity_xyz.z, vmax, "cyan"))
+        g.add_row(Text("Angular r/s", style="bold grey70"))
+        g.add_row(cm("P", frame.angular_velocity_xyz.x, 5.0, "orange3"))
+        g.add_row(cm("Y", frame.angular_velocity_xyz.y, 5.0, "orange3"))
+        g.add_row(cm("R", frame.angular_velocity_xyz.z, 5.0, "orange3"))
+        g.add_row(Text.assemble(("N/S ", "grey70"), (f"{frame.north_south:+.3f}", "white")))
+        return Panel(g, title="Dynamics", border_style="green")
 
 
 class DashboardPane(Container):
@@ -422,6 +478,8 @@ class DashboardPane(Container):
         self.pedals_block = PedalsBlock()
         self.lap_block = LapBlock()
         self.vehicle_block = VehicleBlock()
+        self.session_block = SessionBlock(classes="wide-only")
+        self.dynamics_block = DynamicsBlock(classes="wide-only")
 
     def compose(self) -> ComposeResult:
         with Horizontal():
@@ -435,11 +493,14 @@ class DashboardPane(Container):
                         yield self.gear_digits
                         yield self.gear_info
                     yield self.lap_block
+                yield self.session_block
             with Vertical():
                 yield self.pedals_block
                 yield self.vehicle_block
+                yield self.dynamics_block
 
-    def update_view(self, snap: RuntimeState, cfg: AppConfig) -> None:
+    def update_view(self, snap: RuntimeState, cfg: AppConfig, layout: str = "wide") -> None:
+        compact = layout == "compact"
         frame = snap.frame
         if frame:
             gear = _gear_text(frame.gear)
@@ -457,4 +518,6 @@ class DashboardPane(Container):
         self.speed_block.update(self.speed_block.render_block(frame, cfg))
         self.pedals_block.update(self.pedals_block.render_block(frame, cfg))
         self.lap_block.update(self.lap_block.render_block(frame, snap, cfg))
-        self.vehicle_block.update(self.vehicle_block.render_block(frame, cfg))
+        self.vehicle_block.update(self.vehicle_block.render_block(frame, cfg, compact=compact))
+        self.session_block.update(self.session_block.render_block(frame, snap, cfg))
+        self.dynamics_block.update(self.dynamics_block.render_block(frame))
