@@ -281,29 +281,35 @@ def wheel_drive_state(frame: TelemetryFrame, wheel_key: str) -> str:
     return "ROL"
 
 
-def drivetrain_layout(frame: TelemetryFrame, slip_threshold: float = 1.03) -> str:
-    """Detect which axle is actually driving from wheel slip (>threshold = driving).
+def drivetrain_layout(frame: TelemetryFrame, slip_threshold: float = 1.05) -> str:
+    """Detect driven axle from relative wheel slip.
 
-    On-demand AWD cars only engage the second axle at certain times (low speed,
-    moderate throttle). Comparing front/rear averages would mislabel coasting as AWD,
-    so detect driven wheels by slip instead. Returns COAST when no wheel is slipping.
+    An absolute slip>threshold test mislabels FWD cars: their undriven rear wheels
+    still show small slip (~1.03-1.07) from sensor rounding / inertia at launch.
+    Compare front vs rear averages: the axle with clearly greater slip is driven.
+    AWD only when both axles have significant AND comparable slip.
     """
     if not frame.tyres:
         return "--"
-    def driving(keys):
-        return any(
-            frame.tyres[k].slip_ratio is not None and frame.tyres[k].slip_ratio > slip_threshold
-            for k in keys if k in frame.tyres
-        )
-    front = driving(("FL", "FR"))
-    rear = driving(("RL", "RR"))
-    if front and rear:
-        return "AWD"
-    if rear:
-        return "RWD"
-    if front:
-        return "FWD"
-    return "COAST"
+    def avg(keys):
+        vals = [frame.tyres[k].slip_ratio for k in keys
+                if k in frame.tyres and frame.tyres[k].slip_ratio is not None]
+        return sum(vals) / len(vals) if vals else None
+    front = avg(("FL", "FR"))
+    rear = avg(("RL", "RR"))
+    if front is None or rear is None:
+        return "--"
+    # excess slip above 1.0
+    fe = max(0.0, front - 1.0)
+    re = max(0.0, rear - 1.0)
+    if fe < 0.01 and re < 0.01:
+        return "COAST"
+    # relative dominance: driven axle has clearly more excess slip
+    if fe >= 0.01 and re >= 0.01:
+        if abs(fe - re) <= 0.02 and min(fe, re) >= 0.015:
+            return "AWD"
+        return "FWD" if fe > re else "RWD"
+    return "FWD" if fe > re else "RWD"
 
 
 def induction_state(frame: TelemetryFrame) -> str:
