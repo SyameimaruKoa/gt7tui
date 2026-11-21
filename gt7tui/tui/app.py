@@ -77,6 +77,23 @@ class GT7App(App):
     .wide DashboardPane .wide-only {
         display: block;
     }
+    DetailPane {
+        layout: vertical;
+    }
+    DetailPane > Vertical {
+        height: 1fr;
+    }
+    DetailPane > Vertical > Horizontal {
+        height: 1fr;
+    }
+    DetailPane Static {
+        height: auto;
+        width: 1fr;
+    }
+    DetailPane #flags-panel {
+        height: 1fr;
+        overflow-y: auto;
+    }
     """
 
     BINDINGS = [

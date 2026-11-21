@@ -78,7 +78,7 @@ class DetailPane(Container):
         self.config = config
         self.dynamics = Static()
         self.gearing = Static()
-        self.flags = Static()
+        self.flags = Static(id="flags-panel")
         self.session = Static()
 
     def compose(self) -> ComposeResult:
@@ -178,9 +178,11 @@ class DetailPane(Container):
             dt.add_row(Text("No data", style="dim"))
         self.dynamics.update(_panel(dt, title="Dynamics", border_style="green"))
 
-        # Flags as lamps, unknown as meters
+        # Flags as lamps + all unknown / extended fields
         ft = Table.grid(padding=(0, 0))
-        if f:
+        if not f:
+            ft.add_row(Text("No data", style="dim"))
+        else:
             def lamps(label: str, val: int) -> Text:
                 t = Text()
                 t.append(f"{label} ", style="grey70")
@@ -190,27 +192,17 @@ class DetailPane(Container):
                         t.append("●", style="bold bright_green")
                     else:
                         t.append("○", style="grey35")
-                t.append(f"  0x{val:02X}", style="cyan")
+                t.append(f"  {val:02X}", style="cyan")
                 return t
-            ft.add_row(Text("Flags", style="bold grey70"))
-            ft.add_row(lamps("0x8E", f.flags_8e))
-            ft.add_row(lamps("0x8F", f.flags_8f))
-            ft.add_row(lamps("0x93", f.flags_93))
-            ft.add_row(Text(""))
-            ft.add_row(Text("Unknown fields", style="bold grey70"))
-            keys = list(f.unknown_floats.keys())
-            # find a reasonable scale per value for visual meter
-            for k in keys:
-                v = f.unknown_floats[k]
-                lim = max(1.0, abs(v) * 1.5, 100.0)
-                # compact centered meter
-                t = Text()
-                t.append(f"{k} ", style="grey70")
-                ratio = max(-1.0, min(1.0, v / lim))
+
+            def meter(label: str, v: float, lim: float = 2.0) -> Text:
+                ratio = max(-1.0, min(1.0, v / lim)) if lim else 0.0
                 w = 13
                 mid = w // 2
                 pos = mid + int(round(ratio * (mid - 1)))
                 pos = max(0, min(w - 1, pos))
+                t = Text()
+                t.append(f"{label:<7}", style="grey70")
                 t.append("[", style="grey50")
                 for i in range(w):
                     if i == pos:
@@ -223,7 +215,41 @@ class DetailPane(Container):
                         t.append("·", style="grey30")
                 t.append("]", style="grey50")
                 t.append(f" {v:+9.3f}", style="white")
-                ft.add_row(t)
-        else:
-            ft.add_row(Text("No data", style="dim"))
+                return t
+
+            ft.add_row(Text("Flags", style="bold grey70"))
+            ft.add_row(lamps("0x8E", f.flags_8e))
+            ft.add_row(lamps("0x8F", f.flags_8f))
+            ft.add_row(lamps("0x93", f.flags_93))
+            ft.add_row(Text(""))
+
+            ft.add_row(Text("Extended fields (heartbeat ~)", style="bold grey70"))
+            ft.add_row(Text.assemble(("pkt      ", "grey70"), (f.packet_expansion, "cyan")))
+            if f.energy_recovery_flag is not None:
+                ft.add_row(Text.assemble(("unk3 0x13E", "grey70"), (f" {f.car_type}", "cyan"),
+                                         ("   unk4 0x13F", "grey70"), (f" {f.energy_recovery_flag}", "cyan")))
+            if f.throttle_filtered is not None:
+                ft.add_row(Text.assemble(("unk1 0x13C", "grey70"), (f" {f.throttle_filtered:3d}", "cyan"),
+                                         ("   unk2 0x13D", "grey70"), (f" {f.brake_filtered:3d}", "cyan")))
+            if f.wheel_rotation_rad is not None:
+                ft.add_row(meter("strangl", f.wheel_rotation_rad, 3.2))
+            if f.sway is not None:
+                ft.add_row(meter("sway", f.sway, 30.0))
+            if f.heave is not None:
+                ft.add_row(meter("heave", f.heave, 15.0))
+            if f.surge is not None:
+                ft.add_row(meter("surge", f.surge, 25.0))
+            if f.unk5 is not None:
+                for i, v in enumerate(f.unk5):
+                    ft.add_row(meter(f"unk5[{i}]", v, 1.0))
+            if f.energy_recovery is not None:
+                ft.add_row(meter("ER 0x150", f.energy_recovery, 1.0))
+            if f.motor_assist is not None:
+                ft.add_row(meter("Unk7 0x154", f.motor_assist, 1.5))
+            ft.add_row(Text(""))
+
+            ft.add_row(Text("Unknown floats (base packet)", style="bold grey70"))
+            for k, v in f.unknown_floats.items():
+                lim = max(1.0, abs(v) * 1.5)
+                ft.add_row(meter(k, v, lim if lim > 0 else 1.0))
         self.flags.update(_panel(ft, title="Flags / Unknown", border_style="yellow"))
