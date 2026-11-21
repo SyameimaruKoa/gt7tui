@@ -288,14 +288,44 @@ def wheel_drive_state(frame: TelemetryFrame, wheel_key: str) -> str:
     return "ROL"
 
 
+# Known drive layouts per car_id.  Overrides slip-based detection, which is
+# unreliable on gravel/dirt (excessive wheel slip) and for FWD hybrids whose
+# undriven rear wheels still slip slightly.
+# Values: "FWD", "RWD", "AWD", or None (use slip-based detection).
+KNOWN_DRIVE_LAYOUT: dict[int, str] = {
+    3572: "AWD",   # CR-V (user: AWD)
+    1537: "FWD",   # Prius
+    3568: "FWD",   # Qashqai (user: FF)
+    3561: "FWD",   # Ioniq BEV
+    3219: "RWD",   # NSX (mid-engine RWD)
+    2120: "AWD",   # Italdesign VGT (TBD - confirm)
+}
+
+
+def known_layout(car_id: int) -> str | None:
+    return KNOWN_DRIVE_LAYOUT.get(car_id)
+
+
+def set_known_layouts(layouts: dict[str, str]) -> None:
+    """Override known layouts from configuration (car_id string -> layout)."""
+    for k, v in layouts.items():
+        try:
+            KNOWN_DRIVE_LAYOUT[int(k)] = str(v).upper()
+        except (ValueError, TypeError):
+            continue
+
+
 def drivetrain_layout(frame: TelemetryFrame, slip_threshold: float = 1.05) -> str:
-    """Detect driven axle from relative wheel slip.
+    """Return known drive layout for the car, else detect from relative slip.
 
     An absolute slip>threshold test mislabels FWD cars: their undriven rear wheels
     still show small slip (~1.03-1.07) from sensor rounding / inertia at launch.
     Compare front vs rear averages: the axle with clearly greater slip is driven.
     AWD only when both axles have significant AND comparable slip.
     """
+    known = known_layout(frame.car_id)
+    if known is not None:
+        return known
     if not frame.tyres:
         return "--"
     def avg(keys):
