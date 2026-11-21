@@ -850,15 +850,15 @@ class DashboardPane(ScrollableContainer):
     def compose(self) -> ComposeResult:
         with Horizontal():
             with Vertical():
-                with Horizontal():
-                    yield self.rpm_block
-                    yield self.speed_block
+                yield self.pedals_block
                 yield self.lap_block
                 yield self.session_block
                 yield self.layout_stats
                 yield self.tyre_summary
             with Vertical(classes="wide-right"):
-                yield self.pedals_block
+                with Horizontal():
+                    yield self.rpm_block
+                    yield self.speed_block
                 yield self.vehicle_block
                 yield self.boost_block
                 yield self.hv_battery
