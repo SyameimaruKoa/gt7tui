@@ -112,9 +112,9 @@ class TelemetryFrame:
     brake_filtered: int | None = None
     car_type: int | None = None
     energy_recovery: float | None = None
-    motor_assist: float | None = None
+    engine_output: float | None = None
     energy_recovery_flag: int | None = None
-    unk5: tuple[float, float, float, float] | None = None
+    motor_outputs: tuple[float, float, float, float] | None = None
     throttle_actuated: int | None = None
     brake_actuated: int | None = None
     packet_expansion: str = "none"
@@ -265,12 +265,12 @@ def decode_packet(d: bytes) -> TelemetryFrame:
         frame.brake_actuated = _B(d, 0x13D)
         frame.car_type = _B(d, 0x13E)
         frame.energy_recovery_flag = _B(d, 0x13F)
-        frame.unk5 = (
+        frame.motor_outputs = (
             _safe_float(_f(d, 0x140)), _safe_float(_f(d, 0x144)),
             _safe_float(_f(d, 0x148)), _safe_float(_f(d, 0x14C)),
         )
         frame.energy_recovery = _safe_float(_f(d, 0x150))
-        frame.motor_assist = _safe_float(_f(d, 0x154))
+        frame.engine_output = _safe_float(_f(d, 0x154))
         frame.packet_expansion = "0x158"
 
     return frame
