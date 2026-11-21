@@ -13,7 +13,7 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Static
 
 from ...config import AppConfig
-from ...core.decoder import TelemetryFrame, TyreWheel, induction_state, gear_ratio_valid
+from ...core.decoder import TelemetryFrame, TyreWheel, induction_state, gear_ratio_valid, wheel_drive_state, drivetrain_layout
 from ...core.state import RuntimeState
 
 
@@ -574,12 +574,16 @@ class TyreSummaryBlock(Static):
                 slip_txt = f"{sv:4.2f}" if sv < 10 else "HIGH"
             else:
                 scol, slip_txt = "grey50", "  --"
+            state = wheel_drive_state(frame, key)
+            dstyle = {"DRV": "bold green", "BRK": "bold red", "ROL": "grey70", "--": "grey50"}.get(state, "grey70")
+            dtxt = {"DRV": "DRIVE", "BRK": "BRAKE", "ROL": "roll", "--": "--"}.get(state, state)
             g.add_row(Text.assemble(
                 (f"{key}  ", "bold white"),
                 (f"{w.temp_c:6.1f}°C", f"bold {tcol}"),
                 ("  slip ", "grey50"), (f"{slip_txt:>5}", scol),
-                ("  susp ", "grey50"), (f"{w.suspension:+.3f}", "grey70"),
+                ("  ", "grey50"), (f"{dtxt:>5}", dstyle),
             ))
+        g.add_row(Text.assemble(("Layout ", "grey70"), (drivetrain_layout(frame), "bold cyan")))
         return _panel(g, title="Tyres", border_style="blue")
 
 
