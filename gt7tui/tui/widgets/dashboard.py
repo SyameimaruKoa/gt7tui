@@ -270,32 +270,40 @@ def _analog_bar(value: float, max_value: float, width: int, color: str, ticks: l
 class RpmBlock(Static):
     def render_block(self, frame: TelemetryFrame | None, snap: RuntimeState, cfg: AppConfig):
         thr = cfg.thresholds.get("rpm", {})
-        display_max = float(thr.get("display_max", 8000.0))
-        if display_max <= 0:
-            display_max = 8000.0
         colors = cfg.colors.get("rpm", {})
         c_norm = colors.get("normal", "green")
         c_warn = colors.get("warn", "yellow")
         c_lim = colors.get("limit", "red")
+
         if not frame:
-            gauge = _linear_gauge(0, display_max, width=31, color=c_norm, label="0 rpm")
-            info = Text(" shift ----   limit ----   0-8000 scale", style="grey70")
+            gauge = _linear_gauge(0, 8000, width=31, color=c_norm, label="0 rpm")
+            info = Text(" shift ----   dial ----   scale 0-8000", style="grey70")
             return _panel(Group(gauge, info), title="Tachometer", border_style="cyan")
-        warn = float(frame.rev_warning or 0)
-        limit = float(frame.rev_limiter or 0)
+
+        shift = float(frame.rev_warning or 0)   # engine max rev / shift point
+        dial = float(frame.rev_limiter or 0)    # number engraved on GT7 tachometer (scale marking only)
         if "warn_rpm" in thr:
-            warn = float(thr.get("warn_rpm", warn))
+            shift = float(thr.get("warn_rpm", shift))
         elif "warn_offset" in thr and frame.rev_limiter:
-            warn = max(0.0, float(frame.rev_limiter) - float(thr.get("warn_offset", 500)))
+            shift = max(0.0, float(frame.rev_limiter) - float(thr.get("warn_offset", 500)))
+
+        scale_max = dial if dial > 0 else float(thr.get("display_max", 8000.0))
+        if scale_max <= 0:
+            scale_max = 8000.0
+        # RPM can exceed the dial number; widen scale so actual rpm stays visible.
+        if frame.rpm > scale_max:
+            scale_max = math.ceil(frame.rpm / 500.0) * 500.0
+
         gauge = _linear_gauge(
-            frame.rpm, display_max, width=31,
-            color=c_norm, warn=warn if warn > 0 else None, limit=limit if limit > 0 else None,
+            frame.rpm, scale_max, width=31,
+            color=c_norm, warn=shift if shift > 0 else None,
+            limit=dial if dial > 0 and dial < scale_max else None,
             warn_color=c_warn, limit_color=c_lim,
             label=f"{frame.rpm:5.0f} rpm"
         )
-        warn_txt = f"{warn:4.0f}" if warn > 0 else "----"
-        lim_txt = f"{limit:4.0f}" if limit > 0 else "----"
-        info = Text(f" shift {warn_txt}   limit {lim_txt}   scale 0-{int(display_max)}", style="grey70")
+        shift_txt = f"{shift:4.0f}" if shift > 0 else "----"
+        dial_txt = f"{dial:4.0f}" if dial > 0 else "----"
+        info = Text(f" shift {shift_txt}   dial {dial_txt}   scale 0-{int(scale_max)}", style="grey70")
         return _panel(Group(gauge, info), title="Tachometer", border_style="cyan")
 
 
