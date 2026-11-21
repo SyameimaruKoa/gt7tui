@@ -675,6 +675,11 @@ class HVBatteryBlock(Static):
     def render_block(self, frame: TelemetryFrame | None):
         if not frame or frame.energy_recovery is None:
             return _panel(Text("No HV data (needs ~ heartbeat)", style="dim"), title="HV Battery", border_style="green")
+        if frame.energy_recovery_flag == 0:
+            g = Table.grid(padding=(0, 0))
+            g.add_row(Text("No energy recovery data", style="dim"))
+            g.add_row(Text("(car does not send ER)", style="grey50"))
+            return _panel(g, title="HV Battery", border_style="green")
         er = max(-1.0, min(1.0, frame.energy_recovery))
         # center meter: left=regen(charge), right=assist(discharge)
         w = 21
