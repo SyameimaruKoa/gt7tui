@@ -288,12 +288,11 @@ class RpmBlock(Static):
         elif "warn_offset" in thr and frame.rev_limiter:
             shift = max(0.0, float(frame.rev_limiter) - float(thr.get("warn_offset", 500)))
 
+        # The rev limiter IS the number engraved on GT7's tachometer - keep it as
+        # the fixed scale ceiling. RPM beyond it simply pins the needle.
         scale_max = dial if dial > 0 else float(thr.get("display_max", 8000.0))
         if scale_max <= 0:
             scale_max = 8000.0
-        # RPM can exceed the dial number; widen scale so actual rpm stays visible.
-        if frame.rpm > scale_max:
-            scale_max = math.ceil(frame.rpm / 500.0) * 500.0
 
         gauge = _linear_gauge(
             frame.rpm, scale_max, width=gw,
@@ -545,21 +544,20 @@ class DynamicsBlock(Static):
 class BoostBlock(Static):
     """Dedicated boost / supercharger pressure gauge."""
 
-    def render_block(self, frame: TelemetryFrame | None, cfg: AppConfig):
+    def render_block(self, frame: TelemetryFrame | None, cfg: AppConfig, compact: bool = False):
         if not frame or not frame.has_turbo:
             return _panel(Text("N/A (no turbo)", style="grey50"), title="Boost", border_style="cyan")
         max_kpa = float(cfg.thresholds.get("boost", {}).get("max_kpa", 200.0))
         if max_kpa <= 0:
             max_kpa = 200.0
         val = max(0.0, frame.boost_kpa)
+        gw = 14 if compact else 31
         gauge = _linear_gauge(
-            val, max_kpa, width=31, color="cyan",
-            label=f"{frame.boost_kpa:+7.1f} kPa"
+            val, max_kpa, width=gw, color="cyan",
+            label="" if compact else f"{frame.boost_kpa:+7.1f} kPa"
         )
-        info = Text(
-            f" scale 0-{int(max_kpa)} kPa   {frame.boost_kpa / 100.0:+.2f} bar",
-            style="grey70",
-        )
+        info = (Text(f" {frame.boost_kpa:+.0f}kPa {frame.boost_kpa/100:+.2f}bar", style="grey70") if compact
+                else Text(f" scale 0-{int(max_kpa)} kPa   {frame.boost_kpa / 100.0:+.2f} bar", style="grey70"))
         return _panel(Group(gauge, info), title="Boost", border_style="cyan")
 
 
@@ -601,17 +599,34 @@ class TyreSummaryBlock(Static):
             tcol = temp_style(w.temp_c)
             role = roles.get(key, "")
             rstyle = "bold green" if "DRV" in role or "GRIP" in role else ("bold red" if "BRK" in role else "grey70")
+            # slip as a centered bar: 0.8 .. 1.4, grip at 1.0 = centre
             if w.slip_ratio is not None:
                 sv = w.slip_ratio
                 scol = slip_colors.get("high", "red") if sv >= slip_th + 0.1 else (slip_colors.get("warn", "yellow") if sv >= slip_th else slip_colors.get("normal", "green"))
-                slip_txt = f"{sv:4.2f}" if sv < 10 else "HIGH"
+                sw = 9
+                smid = sw // 2
+                sratio = max(0.0, min(1.0, (sv - 0.8) / 0.6))
+                spos = int(round(sratio * (sw - 1)))
+                spos = max(0, min(sw - 1, spos))
+                slip_bar = Text()
+                slip_bar.append("[", style="grey50")
+                for i in range(sw):
+                    if i == spos:
+                        slip_bar.append("●", style=f"bold {scol}")
+                    elif i == smid:
+                        slip_bar.append("┼", style="white")
+                    elif (smid < i <= spos) or (spos <= i < smid):
+                        slip_bar.append("━", style=scol)
+                    else:
+                        slip_bar.append("·", style="grey30")
+                slip_bar.append("]", style="grey50")
             else:
-                scol, slip_txt = "grey50", "  --"
+                slip_bar = Text("[" + "·" * 9 + "]", style="grey50")
             g.add_row(Text.assemble(
                 (f"{key}    ", "bold white"),
                 (f"{w.temp_c:5.0f}°", f"bold {tcol}"),
-                ("   ", ""), (f"{slip_txt:>4}", scol),
-                ("   ", ""), (f"{role:>9}", rstyle),
+                (" ", ""), slip_bar,
+                (" ", ""), (f"{role:>9}", rstyle),
             ))
         g.add_row(Text.assemble(("LAYOUT ", "grey70"), (drivetrain_layout(frame), "bold cyan")))
         return _panel(g, title="Tyres", border_style="blue")
@@ -653,8 +668,8 @@ class GSensorBlock(Static):
         self._peak_lng = max(self._peak_lng, abs(z))
 
         # 2D map: rows = longitudinal (top=accelerate), cols = lateral (right=+)
-        rows = 9 if not compact else 7
-        cols = 27 if not compact else 19
+        rows = 15 if not compact else 9
+        cols = 15 if not compact else 9
         grid = [["·" for _ in range(cols)] for _ in range(rows)]
         cx = cols // 2
         cz = rows // 2
@@ -852,17 +867,16 @@ class DashboardPane(ScrollableContainer):
             with Vertical():
                 yield self.pedals_block
                 yield self.lap_block
+                yield self.gsensor_block
                 yield self.session_block
-                yield self.layout_stats
-                yield self.tyre_summary
             with Vertical(classes="wide-right"):
-                with Horizontal():
-                    yield self.rpm_block
-                    yield self.speed_block
+                yield self.rpm_block
+                yield self.speed_block
                 yield self.vehicle_block
                 yield self.boost_block
                 yield self.hv_battery
-                yield self.gsensor_block
+                yield self.layout_stats
+                yield self.tyre_summary
 
     def update_view(self, snap: RuntimeState, cfg: AppConfig, layout: str = "wide") -> None:
         compact = layout == "compact"
@@ -874,7 +888,7 @@ class DashboardPane(ScrollableContainer):
         self.vehicle_block.update(self.vehicle_block.render_block(frame, snap, cfg, compact=compact))
         self.session_block.update(self.session_block.render_block(frame, snap, cfg))
         self.tyre_summary.update(self.tyre_summary.render_block(frame, snap, cfg))
-        self.boost_block.update(self.boost_block.render_block(frame, cfg))
+        self.boost_block.update(self.boost_block.render_block(frame, cfg, compact=compact))
         self.hv_battery.update(self.hv_battery.render_block(frame))
-        self.gsensor_block.update(self.gsensor_block.render_block(snap, cfg))
+        self.gsensor_block.update(self.gsensor_block.render_block(snap, cfg, compact=compact))
         self.layout_stats.update(self.layout_stats.render_block(snap, cfg))
