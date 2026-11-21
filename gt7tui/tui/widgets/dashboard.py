@@ -221,23 +221,29 @@ class RpmBlock(Static):
             return Panel(t, title="Tachometer", border_style="cyan")
         warn = float(frame.rev_warning or 0)
         limit = float(frame.rev_limiter or 0)
-        if limit <= 0:
-            limit = max(8000.0, frame.rpm * 1.2, 1.0)
-        if warn <= 0:
-            warn = max(0.0, limit - 500.0)
         thr = cfg.thresholds.get("rpm", {})
         if "warn_rpm" in thr:
             warn = float(thr.get("warn_rpm", warn))
         elif "warn_offset" in thr and frame.rev_limiter:
             warn = max(0.0, float(frame.rev_limiter) - float(thr.get("warn_offset", 500)))
-        warn_ratio = warn / limit if limit > 0 else 0.9
-        limit_ratio = 1.0
+
+        # Display scale: fixed ceiling for readability; actual limiter/warn are markers.
+        display_max = float(thr.get("display_max", 8000.0))
+        if display_max <= 0:
+            display_max = 8000.0
+        actual_max = max(frame.rpm, warn, limit, 1.0)
+        scale_max = display_max
+        if actual_max > scale_max:
+            scale_max = math.ceil(actual_max / 500.0) * 500.0
+
+        warn_ratio = (warn / scale_max) if warn > 0 else None
+        limit_ratio = (limit / scale_max) if limit > 0 else None
         colors = cfg.colors.get("rpm", {})
         c_norm = colors.get("normal", "green")
         c_warn = colors.get("warn", "yellow")
         c_lim = colors.get("limit", "red")
         gauge = _semi_gauge(
-            frame.rpm, limit, width=31, height=7,
+            frame.rpm, scale_max, width=31, height=7,
             color=c_norm, warn_ratio=warn_ratio, limit_ratio=limit_ratio,
             warn_color=c_warn, limit_color=c_lim,
             label=f"{frame.rpm:5.0f} rpm"
@@ -245,10 +251,12 @@ class RpmBlock(Static):
         # scale labels
         scale = Text()
         lo = "0"
-        mid = f"{int(limit/2/100)*100}"
-        hi = f"{int(limit)}"
+        mid = f"{int(scale_max/2/100)*100}"
+        hi = f"{int(scale_max)}"
         scale.append(f" {lo:<6}{mid:^13}{hi:>6}", style="grey70")
-        info = Text(f" warn {warn:4.0f}   limit {limit:4.0f}", style="grey70")
+        warn_txt = f"{warn:4.0f}" if warn > 0 else "----"
+        lim_txt = f"{limit:4.0f}" if limit > 0 else "----"
+        info = Text(f" shift {warn_txt}   limit {lim_txt}", style="grey70")
         return Panel(Group(gauge, scale, info), title="Tachometer", border_style="cyan")
 
 

@@ -64,8 +64,8 @@ class DemoSource:
                     gear = g
                     break
             suggested = min(8, gear + (1 if rpm > 6200 else 0))
-            rev_limiter = 7200
-            rev_warning = 6800
+            rev_limiter = 7400
+            rev_warning = 6800  # shift point
             boost = 80.0 * max(0.0, math.sin(phase)) if gear >= 3 else 30.0 * max(0.0, math.sin(phase))
 
             def tyre(temp_base: float, slip_bias: float) -> TyreWheel:
