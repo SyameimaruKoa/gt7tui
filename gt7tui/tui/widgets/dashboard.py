@@ -609,30 +609,38 @@ class TyreSummaryBlock(Static):
 
 
 class GSensorBlock(Static):
-    """G sensor display: live acceleration plus peak-hold lateral/longitudinal G."""
+    """Vehicle motion from extended fields (sway/heave/surge) + derived G.
+
+    sway/heave/surge (0x130/0x134/0x138) are the car's own motion values from
+    GT7 (undocumented but stable in live data). They are shown alongside the
+    velocity-derived G for comparison.
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._peak_lat = 0.0
-        self._peak_long = 0.0
+        self._peak_sway = 0.0
+        self._peak_surge = 0.0
 
     def render_block(self, snap: RuntimeState, cfg: AppConfig):
+        frame = snap.frame
+        sway = frame.sway if frame else None
+        heave = frame.heave if frame else None
+        surge = frame.surge if frame else None
+        # derived G from velocity delta (kept for reference)
         lat = snap.g_lateral
         lng = snap.g_longitudinal
         vert = snap.g_vertical
-        self._peak_lat = max(self._peak_lat, abs(lat))
-        self._peak_long = max(self._peak_long, abs(lng))
 
-        # 2-axis G meter: center (+), dot shows current G, scaled to +/-2G
-        def plane(label: str, value: float, peak: float, pos_label: str, neg_label: str) -> Text:
-            lim = 2.0
+        def plane(label: str, value: float | None, peak: float, lim: float, pos_label: str, neg_label: str) -> Text:
+            if value is None:
+                return Text(f"{label:<6}[-----------------] --", style="grey50")
             ratio = max(-1.0, min(1.0, value / lim))
             w = 17
             mid = w // 2
             pos = mid + int(round(ratio * (mid - 1)))
             pos = max(0, min(w - 1, pos))
             t = Text()
-            t.append(f"{label} ")
+            t.append(f"{label:<5}")
             t.append("[", style="grey50")
             for i in range(w):
                 if i == pos:
@@ -644,15 +652,25 @@ class GSensorBlock(Static):
                 else:
                     t.append("·", style="grey30")
             t.append("]", style="grey50")
-            t.append(f" {value:+.2f}G", style="bright_yellow")
-            t.append(f"  peak {peak:.2f}G", style="grey70")
+            t.append(f" {value:+7.2f}", style="bright_yellow")
+            t.append(f" pk{peak:5.1f}", style="grey70")
             return t
 
         g = Table.grid(padding=(0, 0))
-        g.add_row(plane("LAT", lat, self._peak_lat, "R", "L"))
-        g.add_row(plane("LNG", lng, self._peak_long, "ACC", "BRK"))
-        g.add_row(Text(f"VERT {vert:+.2f}G", style="grey70"))
-        return _panel(g, title="G Sensor", border_style="bright_yellow")
+        if sway is not None:
+            self._peak_sway = max(self._peak_sway, abs(sway))
+            self._peak_surge = max(self._peak_surge, abs(surge or 0))
+            g.add_row(Text("raw motion (0x130-138)", style="grey50"))
+            g.add_row(plane("SWAY", sway, self._peak_sway, 40.0, "R", "L"))
+            g.add_row(plane("HEAV", heave, 0.0, 40.0, "UP", "DN"))
+            g.add_row(plane("SRGE", surge, self._peak_surge, 40.0, "ACC", "BRK"))
+            g.add_row(Text(f"derived G  lat{lat:+.2f} lng{lng:+.2f} v{vert:+.2f}", style="grey50"))
+        else:
+            g.add_row(Text("no extended motion data", style="dim"))
+            g.add_row(plane("LAT", lat, 0.0, 2.0, "R", "L"))
+            g.add_row(plane("LNG", lng, 0.0, 2.0, "ACC", "BRK"))
+            g.add_row(Text(f"VERT {vert:+.2f}G", style="grey70"))
+        return _panel(g, title="G / Motion", border_style="bright_yellow")
 
 
 class LayoutStatsBlock(Static):
