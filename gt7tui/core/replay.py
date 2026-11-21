@@ -92,7 +92,7 @@ class ReplaySource:
                         lap_start_ts = ts
                         lap_time_s = 0.0
 
-                    self.store.update_frame(frame, current_lap_time_s=lap_time_s)
+                    self.store.update_frame(frame, current_lap_time_s=lap_time_s, packet_ts=ts)
                 if not any_record:
                     self.store.mark_waiting("replay: empty capture")
                     return

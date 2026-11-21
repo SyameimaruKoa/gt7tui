@@ -12,7 +12,7 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Static
 
 from ...config import AppConfig
-from ...core.decoder import TyreWheel
+from ...core.decoder import TyreWheel, wheel_drive_state, drivetrain_layout
 from ...core.state import RuntimeState
 
 
@@ -162,7 +162,7 @@ def _tyre_icon(temp: float, cfg: AppConfig) -> Text:
     return t
 
 
-def _wheel_panel(name: str, wheel: TyreWheel | None, cfg: AppConfig) -> Panel:
+def _wheel_panel(name: str, wheel: TyreWheel | None, cfg: AppConfig, frame=None, key="") -> Panel:
     if wheel is None:
         return _panel(Text("No data", style="dim"), title=name, border_style="blue")
     tstyle = _temp_style(wheel.temp_c, cfg)
@@ -173,6 +173,11 @@ def _wheel_panel(name: str, wheel: TyreWheel | None, cfg: AppConfig) -> Panel:
     lines.append(head)
     lines.append(_temp_gauge(wheel.temp_c, cfg))
     lines.append(_slip_meter(wheel.slip_ratio, cfg))
+    if frame is not None:
+        state = wheel_drive_state(frame, key)
+        style = {"DRV": "bold green", "BRK": "bold red", "ROL": "grey70", "--": "grey50"}.get(state, "grey70")
+        dtxt = {"DRV": "DRIVE", "BRK": "BRAKE", "ROL": "roll", "--": "--"}.get(state, state)
+        lines.append(Text.assemble(("Drive ", "grey70"), (dtxt, style)))
     lines.append(_h_meter("Spd", wheel.speed_kph, 400.0, "k", "bright_cyan", width=14))
     lines.append(_h_meter("Dia", wheel.diameter_m * 200.0, 100.0, "c", "bright_blue", width=14))
     lines.append(_suspension_gauge(wheel.suspension))
@@ -206,10 +211,10 @@ class TyresPane(Container):
         fr = tyres.get("FR")
         rl = tyres.get("RL")
         rr = tyres.get("RR")
-        self.fl.update(_wheel_panel("Front Left (FL)", fl, cfg))
-        self.fr.update(_wheel_panel("Front Right (FR)", fr, cfg))
-        self.rl.update(_wheel_panel("Rear Left (RL)", rl, cfg))
-        self.rr.update(_wheel_panel("Rear Right (RR)", rr, cfg))
+        self.fl.update(_wheel_panel("Front Left (FL)", fl, cfg, frame=frame, key="FL"))
+        self.fr.update(_wheel_panel("Front Right (FR)", fr, cfg, frame=frame, key="FR"))
+        self.rl.update(_wheel_panel("Rear Left (RL)", rl, cfg, frame=frame, key="RL"))
+        self.rr.update(_wheel_panel("Rear Right (RR)", rr, cfg, frame=frame, key="RR"))
         if frame and tyres:
             def node(w: TyreWheel | None, name: str) -> Text:
                 if not w:
@@ -236,7 +241,10 @@ class TyresPane(Container):
             axle = Text("━━━━━\nfront-rear\n━━━━━", style="grey50", justify="center")
             bottom.add_row(node(rl, "RL"), axle, node(rr, "RR"))
             avg_temp = sum(w.temp_c for w in tyres.values() if w) / max(1, len(tyres))
-            info = Text.assemble(("Avg tyre temp: ", "grey70"), (f"{avg_temp:5.1f}°C", f"bold {_temp_style(avg_temp, cfg)}"))
+            info = Text.assemble(
+                ("Layout: ", "grey70"), (drivetrain_layout(frame), "bold cyan"),
+                ("   Avg tyre temp: ", "grey70"), (f"{avg_temp:5.1f}°C", f"bold {_temp_style(avg_temp, cfg)}"),
+            )
             self.summary.update(_panel(Group(top, Text(""), bottom, Text(""), info), title="Tyre Layout", border_style="grey50"))
         else:
             self.summary.update(_panel("No data", title="Tyre Layout", border_style="grey50"))

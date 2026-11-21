@@ -431,7 +431,7 @@ def _mini_gauge(label: str, value: float, max_value: float, unit: str, color: st
 
 
 class VehicleBlock(Static):
-    def render_block(self, frame: TelemetryFrame | None, cfg: AppConfig, compact: bool = False):
+    def render_block(self, frame: TelemetryFrame | None, snap: RuntimeState, cfg: AppConfig, compact: bool = False):
         if not frame:
             return _panel("No data", title="Vehicle", border_style="yellow")
         g = Table.grid(padding=(0, 0))
@@ -445,6 +445,10 @@ class VehicleBlock(Static):
         unit = "kWh" if frame.is_ev else "L"
         g.add_row(_mini_gauge(label, pct, 100.0, "%", fuel_color, width=14 if compact else 18))
         g.add_row(Text(f"       {cur:5.1f}/{cap:5.1f} {unit}", style="grey70"))
+        if frame.is_ev:
+            peak = snap.ev_peak_charge
+            soc = (cur / peak * 100.0) if peak > 0 else 0.0
+            g.add_row(Text(f"       EV SOC {soc:5.1f}%  peak {peak:5.1f} kWh", style="cyan"))
         # temps & pressure as analog bars
         g.add_row(_mini_gauge("OIL P", frame.oil_pressure_bar, 10.0, "b", "yellow3", width=14 if compact else 18))
         g.add_row(Text(f"RH {frame.ride_height_mm:5.0f} mm", style="grey70"))
@@ -574,6 +578,53 @@ class TyreSummaryBlock(Static):
         return _panel(g, title="Tyres", border_style="blue")
 
 
+class GSensorBlock(Static):
+    """G sensor display: live acceleration plus peak-hold lateral/longitudinal G."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._peak_lat = 0.0
+        self._peak_long = 0.0
+
+    def render_block(self, snap: RuntimeState, cfg: AppConfig):
+        lat = snap.g_lateral
+        lng = snap.g_longitudinal
+        vert = snap.g_vertical
+        self._peak_lat = max(self._peak_lat, abs(lat))
+        self._peak_long = max(self._peak_long, abs(lng))
+
+        # 2-axis G meter: center (+), dot shows current G, scaled to +/-2G
+        def plane(label: str, value: float, peak: float, pos_label: str, neg_label: str) -> Text:
+            lim = 2.0
+            ratio = max(-1.0, min(1.0, value / lim))
+            w = 17
+            mid = w // 2
+            pos = mid + int(round(ratio * (mid - 1)))
+            pos = max(0, min(w - 1, pos))
+            t = Text()
+            t.append(f"{label} ")
+            t.append("[", style="grey50")
+            for i in range(w):
+                if i == pos:
+                    t.append("●", style="bold bright_yellow")
+                elif i == mid:
+                    t.append("┼", style="white")
+                elif (mid < i <= pos) or (pos <= i < mid):
+                    t.append("━", style="bright_yellow")
+                else:
+                    t.append("·", style="grey30")
+            t.append("]", style="grey50")
+            t.append(f" {value:+.2f}G", style="bright_yellow")
+            t.append(f"  peak {peak:.2f}G", style="grey70")
+            return t
+
+        g = Table.grid(padding=(0, 0))
+        g.add_row(plane("LAT", lat, self._peak_lat, "R", "L"))
+        g.add_row(plane("LNG", lng, self._peak_long, "ACC", "BRK"))
+        g.add_row(Text(f"VERT {vert:+.2f}G", style="grey70"))
+        return _panel(g, title="G Sensor", border_style="bright_yellow")
+
+
 class DashboardPane(Container):
     def __init__(self, config: AppConfig, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -588,6 +639,7 @@ class DashboardPane(Container):
         self.session_block = SessionBlock(classes="wide-only")
         self.tyre_summary = TyreSummaryBlock(classes="wide-only")
         self.boost_block = BoostBlock()
+        self.gsensor_block = GSensorBlock(classes="wide-only")
 
     def compose(self) -> ComposeResult:
         with Horizontal():
@@ -606,6 +658,7 @@ class DashboardPane(Container):
                 yield self.pedals_block
                 yield self.vehicle_block
                 yield self.boost_block
+                yield self.gsensor_block
                 yield self.tyre_summary
 
     def update_view(self, snap: RuntimeState, cfg: AppConfig, layout: str = "wide") -> None:
@@ -627,7 +680,8 @@ class DashboardPane(Container):
         self.speed_block.update(self.speed_block.render_block(frame, cfg))
         self.pedals_block.update(self.pedals_block.render_block(frame, cfg))
         self.lap_block.update(self.lap_block.render_block(frame, snap, cfg))
-        self.vehicle_block.update(self.vehicle_block.render_block(frame, cfg, compact=compact))
+        self.vehicle_block.update(self.vehicle_block.render_block(frame, snap, cfg, compact=compact))
         self.session_block.update(self.session_block.render_block(frame, snap, cfg))
         self.tyre_summary.update(self.tyre_summary.render_block(frame, cfg))
         self.boost_block.update(self.boost_block.render_block(frame, cfg))
+        self.gsensor_block.update(self.gsensor_block.render_block(snap, cfg))

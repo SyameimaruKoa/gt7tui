@@ -229,3 +229,37 @@ def decode_packet(d: bytes) -> TelemetryFrame:
         frame.unknown_floats[f"0x{off:02X}"] = _safe_float(_f(d, off))
 
     return frame
+
+
+def wheel_drive_state(frame: TelemetryFrame, wheel_key: str) -> str:
+    """Derive DRIVE / BRAKE / ROLL from slip ratio + pedal input.
+
+    Under power, driven wheels show slip > 1. Under braking, slip < 1.
+    Threshold of 0.5% filters telemetry noise.
+    """
+    w = frame.tyres.get(wheel_key)
+    if w is None or w.slip_ratio is None:
+        return "--"
+    slip = w.slip_ratio
+    if frame.throttle > 5.0 and slip > 1.005:
+        return "DRV"
+    if frame.brake > 5.0 and slip < 0.995:
+        return "BRK"
+    return "ROL"
+
+
+def drivetrain_layout(frame: TelemetryFrame) -> str:
+    """Guess which axle is driven by comparing average slip of front vs rear wheels."""
+    if not frame.tyres:
+        return "--"
+    def avg(keys):
+        vals = [frame.tyres[k].slip_ratio for k in keys if frame.tyres.get(k) and frame.tyres[k].slip_ratio is not None]
+        return sum(vals) / len(vals) if vals else None
+    front = avg(("FL", "FR"))
+    rear = avg(("RL", "RR"))
+    if front is None or rear is None:
+        return "--"
+    diff = front - rear
+    if abs(diff) < 0.01:
+        return "AWD"
+    return "FWD" if diff > 0 else "RWD"

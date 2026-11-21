@@ -26,6 +26,14 @@ class RuntimeState:
     current_lap_start_mono: float = 0.0
     current_lap_seen: int = -1
     current_lap_time_s: float = 0.0
+    ev_peak_charge: float = 0.0
+
+    # G sensor (derived from velocity delta): lateral, longitudinal, vertical in G
+    g_lateral: float = 0.0
+    g_longitudinal: float = 0.0
+    g_vertical: float = 0.0
+    _prev_velocity: tuple[float, float, float] | None = None
+    _prev_vel_time: float = 0.0
 
 
 class StateStore:
@@ -33,7 +41,7 @@ class StateStore:
         self._lock = threading.Lock()
         self._state = RuntimeState()
 
-    def update_frame(self, frame: TelemetryFrame, current_lap_time_s: float | None = None) -> None:
+    def update_frame(self, frame: TelemetryFrame, current_lap_time_s: float | None = None, packet_ts: float | None = None) -> None:
         now = time.time()
         mono = time.monotonic()
         with self._lock:
@@ -45,6 +53,31 @@ class StateStore:
             st.last_packet_id = frame.packet_id
             st.packets_decoded += 1
             st.last_error = ""
+            # EV battery: track peak charge this session to derive SOC
+            if frame.is_ev and frame.fuel_or_charge > st.ev_peak_charge:
+                st.ev_peak_charge = frame.fuel_or_charge
+            # G sensor: differentiate velocity. Use packet timestamp when replay provides it,
+            # otherwise wall clock. Guard against noise / duplicated packets.
+            v = (frame.velocity_xyz.x, frame.velocity_xyz.y, frame.velocity_xyz.z)
+            vel_time = packet_ts if packet_ts is not None else now
+            if st._prev_velocity is not None:
+                dt = vel_time - st._prev_vel_time
+                if 0.001 < dt < 0.5:
+                    ax = (v[0] - st._prev_velocity[0]) / dt
+                    ay = (v[1] - st._prev_velocity[1]) / dt
+                    az = (v[2] - st._prev_velocity[2]) / dt
+                    # smooth to reduce per-packet jitter; clamp implausible spikes
+                    def smooth_g(prev: float, raw: float) -> float:
+                        raw = max(-6.0, min(6.0, raw))
+                        val = prev * 0.8 + raw * 0.2
+                        # rate limit: at most 0.5G change per update
+                        delta = max(-0.5, min(0.5, val - prev))
+                        return max(-6.0, min(6.0, prev + delta))
+                    st.g_longitudinal = smooth_g(st.g_longitudinal, ax / 9.81)
+                    st.g_lateral = smooth_g(st.g_lateral, ay / 9.81)
+                    st.g_vertical = smooth_g(st.g_vertical, az / 9.81)
+            st._prev_velocity = v
+            st._prev_vel_time = vel_time
             # lap timing
             if frame.current_lap > 0:
                 if frame.current_lap != st.current_lap_seen:
@@ -102,4 +135,10 @@ class StateStore:
                 current_lap_start_mono=st.current_lap_start_mono,
                 current_lap_seen=st.current_lap_seen,
                 current_lap_time_s=st.current_lap_time_s,
+                ev_peak_charge=st.ev_peak_charge,
+                g_lateral=st.g_lateral,
+                g_longitudinal=st.g_longitudinal,
+                g_vertical=st.g_vertical,
+                _prev_velocity=st._prev_velocity,
+                _prev_vel_time=st._prev_vel_time,
             )
