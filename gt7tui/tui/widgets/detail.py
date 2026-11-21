@@ -11,7 +11,7 @@ from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Static
 
-from ...core.decoder import induction_state, gear_ratio_valid
+from ...core.decoder import induction_state, gear_ratio_valid, flag_names, FLAG8E_BITS, FLAG8F_BITS
 from ...config import AppConfig
 from ...core.state import RuntimeState
 
@@ -136,7 +136,15 @@ class DetailPane(Container):
                 if active:
                     bar.append(" ◀", style="bold bright_yellow")
                 gt.add_row(bar)
-            gt.add_row(Text(f"U: {f.gear_ratio_unknown:7.3f}", style="grey50"))
+            # GT7 broadcasts only 8 gear ratios (0x104-0x120) plus a final/unknown
+            # ratio at 0x100. Cars with 9/10 gears report the gear correctly but
+            # never send those ratios, so show them explicitly as N/A.
+            for g in (9, 10):
+                active = (f.gear == g)
+                mark = " ◀" if active else ""
+                style = "bold bright_yellow" if active else "grey50"
+                gt.add_row(Text(f"{g}: N/A (not broadcast){mark}", style=style))
+            gt.add_row(Text(f"final: {f.gear_ratio_unknown:7.3f}", style="grey50"))
         else:
             gt.add_row(Text("No data", style="dim"))
         self.gearing.update(_panel(gt, title="Gearing", border_style="magenta"))
@@ -219,7 +227,9 @@ class DetailPane(Container):
 
             ft.add_row(Text("Flags", style="bold grey70"))
             ft.add_row(lamps("0x8E", f.flags_8e))
+            ft.add_row(Text.assemble(("      ", ""), (flag_names(f.flags_8e, FLAG8E_BITS), "yellow")))
             ft.add_row(lamps("0x8F", f.flags_8f))
+            ft.add_row(Text.assemble(("      ", ""), (flag_names(f.flags_8f, FLAG8F_BITS), "yellow")))
             ft.add_row(Text(""))
 
             ft.add_row(Text("Identified fields (heartbeat ~)", style="bold green"))

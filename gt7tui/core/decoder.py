@@ -412,3 +412,26 @@ def tyre_roles(frame: TelemetryFrame, g_lateral: float, g_longitudinal: float) -
 def has_energy_recovery(frame: TelemetryFrame) -> bool:
     """unk4 (0x13F) is 1 on cars with energy recovery per PDTools issue #14."""
     return frame.energy_recovery_flag == 1
+
+
+# Flag bit meanings per user observation (overrides PDTools guesses)
+FLAG8E_BITS = {
+    0x80: "Night/Day",
+    0x40: "Handbrake",
+    0x20: "RevLimit",
+    0x10: "ClutchOff",
+    0x04: "Loading",
+    0x02: "Paused",
+    0x01: "Racing",
+}
+FLAG8F_BITS = {
+    0x08: "TCS",
+    0x04: "ASM",
+    0x02: "LowBeam",
+    0x01: "HighBeam",
+}
+
+
+def flag_names(val: int, bits: dict[int, str]) -> str:
+    on = [name for mask, name in sorted(bits.items(), reverse=True) if val & mask]
+    return ", ".join(on) if on else "-"
