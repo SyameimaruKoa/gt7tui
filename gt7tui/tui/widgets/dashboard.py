@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from typing import Optional
 
+from rich import box
 from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
@@ -12,8 +13,13 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Digits, Static
 
 from ...config import AppConfig
-from ...core.decoder import TelemetryFrame
+from ...core.decoder import TelemetryFrame, TyreWheel
 from ...core.state import RuntimeState
+
+
+def _panel(*args, **kwargs):
+    kwargs.setdefault("box", box.SQUARE)
+    return Panel(*args, **kwargs)
 
 
 def _fmt_lap(ms: int) -> str:
@@ -187,6 +193,54 @@ def _semi_gauge(
     return out
 
 
+def _linear_gauge(
+    value: float,
+    max_value: float,
+    width: int = 31,
+    color: str = "green",
+    warn: float | None = None,
+    limit: float | None = None,
+    warn_color: str = "yellow",
+    limit_color: str = "red",
+    label: str = "",
+) -> Text:
+    # Straight-line horizontal gauge. No arcs, no angled needles.
+    max_value = max(1e-6, max_value)
+    ratio = _clamp01(value / max_value)
+    filled = int(round(ratio * width))
+    warn_pos = int(round(warn / max_value * width)) if warn and warn > 0 else -1
+    limit_pos = int(round(limit / max_value * width)) if limit and limit > 0 else -1
+
+    cells = [" "] * (width + 2)
+    def put(text: str, pos: int) -> None:
+        for i, ch in enumerate(text):
+            if 0 <= pos + i < len(cells):
+                cells[pos + i] = ch
+    put("0", 1)
+    mid_txt = f"{max_value / 2.0:.0f}"
+    put(mid_txt, 1 + max(0, (width - len(mid_txt)) // 2))
+    hi_txt = f"{max_value:.0f}"
+    put(hi_txt, 1 + width - len(hi_txt))
+
+    out = Text()
+    out.append("".join(cells).rstrip(), style="grey70")
+    out.append("\n")
+    out.append("├", style="grey50")
+    for i in range(width):
+        if i == warn_pos:
+            out.append("▲", style=f"bold {warn_color}")
+        elif i == limit_pos:
+            out.append("▼", style=f"bold {limit_color}")
+        elif i < filled:
+            out.append("━", style=color)
+        else:
+            out.append("┄", style="grey23")
+    out.append("┤", style="grey50")
+    if label:
+        out.append(f" {label}", style=f"bold {color}")
+    return out
+
+
 def _analog_bar(value: float, max_value: float, width: int, color: str, ticks: list[float] | None = None) -> Text:
     # Meter-like horizontal bar with pointer
     max_value = max(1e-6, max_value)
@@ -215,66 +269,46 @@ def _analog_bar(value: float, max_value: float, width: int, color: str, ticks: l
 
 class RpmBlock(Static):
     def render_block(self, frame: TelemetryFrame | None, snap: RuntimeState, cfg: AppConfig):
-        if not frame:
-            gauge = _semi_gauge(0, 8000, width=31, height=7, color="green", label="--- rpm")
-            t = Text.assemble(gauge, "\n", Text("RPM:   0   warn    0   lim    0", style="dim"))
-            return Panel(t, title="Tachometer", border_style="cyan")
-        warn = float(frame.rev_warning or 0)
-        limit = float(frame.rev_limiter or 0)
         thr = cfg.thresholds.get("rpm", {})
-        if "warn_rpm" in thr:
-            warn = float(thr.get("warn_rpm", warn))
-        elif "warn_offset" in thr and frame.rev_limiter:
-            warn = max(0.0, float(frame.rev_limiter) - float(thr.get("warn_offset", 500)))
-
-        # Display scale: fixed ceiling for readability; actual limiter/warn are markers.
         display_max = float(thr.get("display_max", 8000.0))
         if display_max <= 0:
             display_max = 8000.0
-        actual_max = max(frame.rpm, warn, limit, 1.0)
-        scale_max = display_max
-        if actual_max > scale_max:
-            scale_max = math.ceil(actual_max / 500.0) * 500.0
-
-        warn_ratio = (warn / scale_max) if warn > 0 else None
-        limit_ratio = (limit / scale_max) if limit > 0 else None
         colors = cfg.colors.get("rpm", {})
         c_norm = colors.get("normal", "green")
         c_warn = colors.get("warn", "yellow")
         c_lim = colors.get("limit", "red")
-        gauge = _semi_gauge(
-            frame.rpm, scale_max, width=31, height=7,
-            color=c_norm, warn_ratio=warn_ratio, limit_ratio=limit_ratio,
+        if not frame:
+            gauge = _linear_gauge(0, display_max, width=31, color=c_norm, label="0 rpm")
+            info = Text(" shift ----   limit ----   0-8000 scale", style="grey70")
+            return _panel(Group(gauge, info), title="Tachometer", border_style="cyan")
+        warn = float(frame.rev_warning or 0)
+        limit = float(frame.rev_limiter or 0)
+        if "warn_rpm" in thr:
+            warn = float(thr.get("warn_rpm", warn))
+        elif "warn_offset" in thr and frame.rev_limiter:
+            warn = max(0.0, float(frame.rev_limiter) - float(thr.get("warn_offset", 500)))
+        gauge = _linear_gauge(
+            frame.rpm, display_max, width=31,
+            color=c_norm, warn=warn if warn > 0 else None, limit=limit if limit > 0 else None,
             warn_color=c_warn, limit_color=c_lim,
             label=f"{frame.rpm:5.0f} rpm"
         )
-        # scale labels
-        scale = Text()
-        lo = "0"
-        mid = f"{int(scale_max/2/100)*100}"
-        hi = f"{int(scale_max)}"
-        scale.append(f" {lo:<6}{mid:^13}{hi:>6}", style="grey70")
         warn_txt = f"{warn:4.0f}" if warn > 0 else "----"
         lim_txt = f"{limit:4.0f}" if limit > 0 else "----"
-        info = Text(f" shift {warn_txt}   limit {lim_txt}", style="grey70")
-        return Panel(Group(gauge, scale, info), title="Tachometer", border_style="cyan")
+        info = Text(f" shift {warn_txt}   limit {lim_txt}   scale 0-{int(display_max)}", style="grey70")
+        return _panel(Group(gauge, info), title="Tachometer", border_style="cyan")
 
 
 class SpeedBlock(Static):
     def render_block(self, frame: TelemetryFrame | None, cfg: AppConfig):
         speed = frame.speed_kph if frame else 0.0
-        # dynamic max for scale
         top = 320.0
         if frame and frame.est_top_speed and frame.est_top_speed > 0:
             top = max(200.0, min(450.0, float(frame.est_top_speed) * 1.1))
-        gauge = _semi_gauge(speed, top, width=31, height=7, color="bright_cyan", label=f"{speed:5.1f} km/h")
-        scale = Text()
-        scale.append(f" {'0':<6}{int(top/2):^13}{int(top):>6}", style="grey70")
-        est = ""
-        if frame and frame.est_top_speed:
-            est = f" est.max {frame.est_top_speed} km/h"
+        gauge = _linear_gauge(speed, top, width=31, color="bright_cyan", label=f"{speed:5.1f} km/h")
+        est = f" est.max {frame.est_top_speed} km/h" if frame and frame.est_top_speed else ""
         info = Text(est, style="grey70")
-        return Panel(Group(gauge, scale, info), title="Speedometer", border_style="bright_cyan")
+        return _panel(Group(gauge, info), title="Speedometer", border_style="bright_cyan")
 
 
 class PedalsBlock(Static):
@@ -314,7 +348,7 @@ class PedalsBlock(Static):
         labels = "    " + "  ".join([f"{name:^4}" for name, _, _ in cols])
         vals = "    " + "  ".join([f"{val:3.0f}%" for _, val, _ in cols])
         content = "\n".join(lines + [labels, vals])
-        return Panel(content, title="Pedals", border_style="magenta")
+        return _panel(content, title="Pedals", border_style="magenta")
 
 
 class LapBlock(Static):
@@ -326,7 +360,7 @@ class LapBlock(Static):
             table.add_row("Best:    --:--.---")
             table.add_row("Last:    --:--.---")
             table.add_row("Delta:   --")
-            return Panel(table, title="Lap / Timing", border_style="green")
+            return _panel(table, title="Lap / Timing", border_style="green")
         lap_cur = str(frame.current_lap) if frame.current_lap >= 0 else "--"
         lap_tot = str(frame.total_laps) if frame.total_laps >= 0 else "--"
         pos_cur = str(frame.position) if frame.position >= 0 else "--"
@@ -364,7 +398,7 @@ class LapBlock(Static):
             table.add_row(bar)
         else:
             table.add_row(delta_text)
-        return Panel(table, title="Lap / Timing", border_style="green")
+        return _panel(table, title="Lap / Timing", border_style="green")
 
 
 def _mini_gauge(label: str, value: float, max_value: float, unit: str, color: str, width: int = 18) -> Text:
@@ -390,7 +424,7 @@ def _mini_gauge(label: str, value: float, max_value: float, unit: str, color: st
 class VehicleBlock(Static):
     def render_block(self, frame: TelemetryFrame | None, cfg: AppConfig, compact: bool = False):
         if not frame:
-            return Panel("No data", title="Vehicle", border_style="yellow")
+            return _panel("No data", title="Vehicle", border_style="yellow")
         g = Table.grid(padding=(0, 0))
         # fuel/charge gauge
         cap = frame.fuel_capacity
@@ -416,7 +450,7 @@ class VehicleBlock(Static):
         g.add_row(_mini_gauge("WATER", frame.water_temp_c, 130.0, "°", "dodger_blue2", width=14 if compact else 18))
         g.add_row(_mini_gauge("OIL P", frame.oil_pressure_bar, 10.0, "b", "yellow3", width=14 if compact else 18))
         g.add_row(Text(f" RH {frame.ride_height_mm:5.0f} mm", style="grey70"))
-        return Panel(g, title="Vehicle", border_style="yellow")
+        return _panel(g, title="Vehicle", border_style="yellow")
 
 
 class SessionBlock(Static):
@@ -424,14 +458,14 @@ class SessionBlock(Static):
         g = Table.grid(padding=(0, 1))
         if not frame:
             g.add_row(Text("No telemetry", style="dim"))
-            return Panel(g, title="Session", border_style="blue")
+            return _panel(g, title="Session", border_style="blue")
         g.add_row(Text.assemble(("Car ", "grey70"), (str(frame.car_id), "bold white"), ("  Pkt ", "grey70"), (str(frame.packet_id), "cyan")))
         g.add_row(Text.assemble(("Lap ", "grey70"), (f"{max(0, frame.current_lap)}/{max(0, frame.total_laps)}", "white"), ("  Pos ", "grey70"), (f"{max(0, frame.position)}/{max(0, frame.total_positions)}", "white")))
         g.add_row(Text.assemble(("Time ", "grey70"), (f"{frame.time_on_track_ms/1000.0:,.1f}s", "white")))
         g.add_row(Text.assemble(("Best ", "grey70"), (_fmt_lap(frame.best_lap_ms), "green"), ("  Last ", "grey70"), (_fmt_lap(frame.last_lap_ms), "yellow")))
         boost = f"{frame.boost_kpa:+.1f}kPa" if frame.has_turbo else "N/A"
         g.add_row(Text.assemble(("Boost ", "grey70"), (boost, "cyan" if frame.has_turbo else "grey50"), ("  RH ", "grey70"), (f"{frame.ride_height_mm:.0f}mm", "white")))
-        return Panel(g, title="Session", border_style="blue")
+        return _panel(g, title="Session", border_style="blue")
 
 
 class DynamicsBlock(Static):
@@ -439,7 +473,7 @@ class DynamicsBlock(Static):
         g = Table.grid(padding=(0, 1))
         if not frame:
             g.add_row(Text("No data", style="dim"))
-            return Panel(g, title="Dynamics", border_style="green")
+            return _panel(g, title="Dynamics", border_style="green")
         vmax = 120.0
         def cm(label, v, lim, color):
             lim = max(1e-6, lim)
@@ -472,7 +506,55 @@ class DynamicsBlock(Static):
         g.add_row(cm("Y", frame.angular_velocity_xyz.y, 5.0, "orange3"))
         g.add_row(cm("R", frame.angular_velocity_xyz.z, 5.0, "orange3"))
         g.add_row(Text.assemble(("N/S ", "grey70"), (f"{frame.north_south:+.3f}", "white")))
-        return Panel(g, title="Dynamics", border_style="green")
+        return _panel(g, title="Dynamics", border_style="green")
+
+
+class TyreSummaryBlock(Static):
+    """Compact 4-wheel tyre overview for the dashboard (wide layout only)."""
+
+    def render_block(self, frame: TelemetryFrame | None, cfg: AppConfig):
+        g = Table.grid(padding=(0, 1))
+        if not frame or not frame.tyres:
+            g.add_row(Text("No tyre data", style="dim"))
+            return _panel(g, title="Tyres", border_style="blue")
+        th = cfg.thresholds.get("tyre_temp", {})
+        colors = cfg.colors.get("tyre_temp", {})
+        cold = float(th.get("cold", 60.0))
+        opt_min = float(th.get("optimal_min", 80.0))
+        opt_max = float(th.get("optimal_max", 100.0))
+        hot = float(th.get("hot", 110.0))
+
+        def temp_style(t: float) -> str:
+            if t < cold:
+                return colors.get("cold", "cyan")
+            if opt_min <= t <= opt_max:
+                return colors.get("optimal", "green")
+            if t >= hot:
+                return colors.get("hot", "red")
+            return colors.get("warm", "yellow")
+
+        order = ("FL", "FR", "RL", "RR")
+        slip_th = float(cfg.thresholds.get("slip", {}).get("warn_ratio", 1.10))
+        slip_colors = cfg.colors.get("slip", {})
+        for key in order:
+            w = frame.tyres.get(key)
+            if not w:
+                g.add_row(Text.assemble((f"{key}  ", "bold grey50"), ("no data", "dim")))
+                continue
+            tcol = temp_style(w.temp_c)
+            if w.slip_ratio is not None:
+                sv = w.slip_ratio
+                scol = slip_colors.get("high", "red") if sv >= slip_th + 0.1 else (slip_colors.get("warn", "yellow") if sv >= slip_th else slip_colors.get("normal", "green"))
+                slip_txt = f"{sv:4.2f}" if sv < 10 else "HIGH"
+            else:
+                scol, slip_txt = "grey50", "  --"
+            g.add_row(Text.assemble(
+                (f"{key}  ", "bold white"),
+                (f"{w.temp_c:6.1f}°C", f"bold {tcol}"),
+                ("  slip ", "grey50"), (f"{slip_txt:>5}", scol),
+                ("  susp ", "grey50"), (f"{w.suspension:+.3f}", "grey70"),
+            ))
+        return _panel(g, title="Tyres", border_style="blue")
 
 
 class DashboardPane(Container):
@@ -487,7 +569,7 @@ class DashboardPane(Container):
         self.lap_block = LapBlock()
         self.vehicle_block = VehicleBlock()
         self.session_block = SessionBlock(classes="wide-only")
-        self.dynamics_block = DynamicsBlock(classes="wide-only")
+        self.tyre_summary = TyreSummaryBlock(classes="wide-only")
 
     def compose(self) -> ComposeResult:
         with Horizontal():
@@ -505,7 +587,7 @@ class DashboardPane(Container):
             with Vertical():
                 yield self.pedals_block
                 yield self.vehicle_block
-                yield self.dynamics_block
+                yield self.tyre_summary
 
     def update_view(self, snap: RuntimeState, cfg: AppConfig, layout: str = "wide") -> None:
         compact = layout == "compact"
@@ -528,4 +610,4 @@ class DashboardPane(Container):
         self.lap_block.update(self.lap_block.render_block(frame, snap, cfg))
         self.vehicle_block.update(self.vehicle_block.render_block(frame, cfg, compact=compact))
         self.session_block.update(self.session_block.render_block(frame, snap, cfg))
-        self.dynamics_block.update(self.dynamics_block.render_block(frame))
+        self.tyre_summary.update(self.tyre_summary.render_block(frame, cfg))

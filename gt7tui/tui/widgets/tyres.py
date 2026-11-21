@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 
+from rich import box
 from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
@@ -13,6 +14,11 @@ from textual.widgets import Static
 from ...config import AppConfig
 from ...core.decoder import TyreWheel
 from ...core.state import RuntimeState
+
+
+def _panel(*args, **kwargs):
+    kwargs.setdefault("box", box.SQUARE)
+    return Panel(*args, **kwargs)
 
 
 def _temp_style(temp: float, cfg: AppConfig) -> str:
@@ -158,7 +164,7 @@ def _tyre_icon(temp: float, cfg: AppConfig) -> Text:
 
 def _wheel_panel(name: str, wheel: TyreWheel | None, cfg: AppConfig) -> Panel:
     if wheel is None:
-        return Panel(Text("No data", style="dim"), title=name, border_style="blue")
+        return _panel(Text("No data", style="dim"), title=name, border_style="blue")
     tstyle = _temp_style(wheel.temp_c, cfg)
     lines = []
     # top: icon + big temp
@@ -170,7 +176,7 @@ def _wheel_panel(name: str, wheel: TyreWheel | None, cfg: AppConfig) -> Panel:
     lines.append(_h_meter("Spd", wheel.speed_kph, 400.0, "k", "bright_cyan", width=14))
     lines.append(_h_meter("Dia", wheel.diameter_m * 200.0, 100.0, "c", "bright_blue", width=14))
     lines.append(_suspension_gauge(wheel.suspension))
-    return Panel(Group(*lines), title=name, border_style="blue")
+    return _panel(Group(*lines), title=name, border_style="blue")
 
 
 class TyresPane(Container):
@@ -231,6 +237,6 @@ class TyresPane(Container):
             bottom.add_row(node(rl, "RL"), axle, node(rr, "RR"))
             avg_temp = sum(w.temp_c for w in tyres.values() if w) / max(1, len(tyres))
             info = Text.assemble(("Avg tyre temp: ", "grey70"), (f"{avg_temp:5.1f}°C", f"bold {_temp_style(avg_temp, cfg)}"))
-            self.summary.update(Panel(Group(top, Text(""), bottom, Text(""), info), title="Tyre Layout", border_style="grey50"))
+            self.summary.update(_panel(Group(top, Text(""), bottom, Text(""), info), title="Tyre Layout", border_style="grey50"))
         else:
-            self.summary.update(Panel("No data", title="Tyre Layout", border_style="grey50"))
+            self.summary.update(_panel("No data", title="Tyre Layout", border_style="grey50"))

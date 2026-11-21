@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 
+from rich import box
 from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
@@ -12,6 +13,11 @@ from textual.widgets import Static
 
 from ...config import AppConfig
 from ...core.state import RuntimeState
+
+
+def _panel(*args, **kwargs):
+    kwargs.setdefault("box", box.SQUARE)
+    return Panel(*args, **kwargs)
 
 
 def _clamp01(x: float) -> float:
@@ -103,7 +109,7 @@ class DetailPane(Container):
             st.add_row(Text.assemble(("Boost: ", "grey70"), (boost, "cyan" if f.has_turbo else "grey50"), ("   Speed: ", "grey70"), (f"{f.speed_kph:.1f} km/h", "bold bright_cyan"), ("   RPM: ", "grey70"), (f"{f.rpm:.0f}", "bold green")))
         else:
             st.add_row(Text("No telemetry frame", style="dim"))
-        self.session.update(Panel(st, title="Session / Vehicle", border_style="cyan"))
+        self.session.update(_panel(st, title="Session / Vehicle", border_style="cyan"))
 
         # Gearing as horizontal bars
         gt = Table.grid(padding=(0, 1))
@@ -133,7 +139,7 @@ class DetailPane(Container):
             gt.add_row(Text(f"U: {f.gear_ratio_unknown:7.3f}", style="grey50"))
         else:
             gt.add_row(Text("No data", style="dim"))
-        self.gearing.update(Panel(gt, title="Gearing", border_style="magenta"))
+        self.gearing.update(_panel(gt, title="Gearing", border_style="magenta"))
 
         # Dynamics as meters
         dt = Table.grid(padding=(0, 0))
@@ -165,7 +171,7 @@ class DetailPane(Container):
             dt.add_row(_center_meter("N/S", f.north_south, 1.0, "", color_pos="white", color_neg="grey50"))
         else:
             dt.add_row(Text("No data", style="dim"))
-        self.dynamics.update(Panel(dt, title="Dynamics", border_style="green"))
+        self.dynamics.update(_panel(dt, title="Dynamics", border_style="green"))
 
         # Flags as lamps, unknown as meters
         ft = Table.grid(padding=(0, 0))
@@ -215,4 +221,4 @@ class DetailPane(Container):
                 ft.add_row(t)
         else:
             ft.add_row(Text("No data", style="dim"))
-        self.flags.update(Panel(ft, title="Flags / Unknown", border_style="yellow"))
+        self.flags.update(_panel(ft, title="Flags / Unknown", border_style="yellow"))

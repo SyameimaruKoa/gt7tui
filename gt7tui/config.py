@@ -31,10 +31,12 @@ def default_config() -> dict[str, Any]:
         "ui": {
             "refresh_hz": 20.0,
             "layout": "default",
+            "curves_path": "gt7tui_curves.json",
             "show": {
                 "dashboard": True,
                 "tyres": True,
                 "detail": True,
+                "curve": True,
             },
         },
         "thresholds": {
@@ -112,7 +114,8 @@ class AppConfig:
     refresh_hz: float = 20.0
     heartbeat_interval_packets: int = 100
     layout: str = "default"
-    show: dict[str, bool] = field(default_factory=lambda: {"dashboard": True, "tyres": True, "detail": True})
+    curves_path: str = "gt7tui_curves.json"
+    show: dict[str, bool] = field(default_factory=lambda: {"dashboard": True, "tyres": True, "detail": True, "curve": True})
     thresholds: dict[str, Any] = field(default_factory=dict)
     colors: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict)
@@ -171,7 +174,8 @@ def build_config(file_cfg: dict[str, Any] | None = None, cli: dict[str, Any] | N
         refresh_hz=float(ui.get("refresh_hz", 20.0)),
         heartbeat_interval_packets=int(net.get("heartbeat_interval_packets", 100)),
         layout=str(ui.get("layout", "default")),
-        show=dict(ui.get("show", {"dashboard": True, "tyres": True, "detail": True})),
+        curves_path=str(ui.get("curves_path", "gt7tui_curves.json")),
+        show=dict(ui.get("show", {"dashboard": True, "tyres": True, "detail": True, "curve": True})),
         thresholds=dict(merged.get("thresholds", {})),
         colors=dict(merged.get("colors", {})),
         raw=merged,
