@@ -463,17 +463,23 @@ class VehicleBlock(Static):
         # fuel/charge gauge
         cap = frame.fuel_capacity
         cur = frame.fuel_or_charge
-        pct = (cur / cap * 100.0) if cap > 0 else 0.0
+        if frame.is_ev:
+            # BEV: fuel_capacity = 0, fuel_or_charge is remaining charge.
+            # Use the session peak as the effective full-charge reference.
+            peak = snap.ev_peak_charge if snap.ev_peak_charge > 0 else cur
+            pct = (cur / peak * 100.0) if peak > 0 else 0.0
+            ref = peak
+            unit = "kWh"
+            label = "BAT"
+        else:
+            pct = (cur / cap * 100.0) if cap > 0 else 0.0
+            ref = cap
+            unit = "L"
+            label = "FUEL"
         low_pct = float(cfg.thresholds.get("fuel", {}).get("low_percent", 15.0))
         fuel_color = cfg.colors.get("fuel", {}).get("low" if pct <= low_pct else "normal", "green")
-        label = "BAT" if frame.is_ev else "FUEL"
-        unit = "kWh" if frame.is_ev else "L"
         g.add_row(_mini_gauge(label, pct, 100.0, "%", fuel_color, width=14 if compact else 18))
-        g.add_row(Text(f"       {cur:5.1f}/{cap:5.1f} {unit}", style="grey70"))
-        if frame.is_ev:
-            peak = snap.ev_peak_charge
-            soc = (cur / peak * 100.0) if peak > 0 else 0.0
-            g.add_row(Text(f"       EV SOC {soc:5.1f}%  peak {peak:5.1f} kWh", style="cyan"))
+        g.add_row(Text(f"       {cur:5.1f}/{ref:5.1f} {unit}", style="grey70"))
         # temps & pressure as analog bars
         g.add_row(_mini_gauge("OIL P", frame.oil_pressure_bar, 10.0, "b", "yellow3", width=14 if compact else 18))
         g.add_row(Text(f"RH {frame.ride_height_mm:5.0f} mm", style="grey70"))
@@ -648,7 +654,7 @@ class GSensorBlock(Static):
     def render_block(self, snap: RuntimeState, cfg: AppConfig, compact: bool = False):
         frame = snap.frame
         if frame and frame.sway is not None:
-            x = frame.sway       # lateral (+ = right)
+            x = -(frame.sway or 0.0)  # sway+ = left; negate so screen right = right
             z = frame.surge or 0.0  # longitudinal (+ = accelerate)
             y = frame.heave or 0.0  # vertical
             lim_x, lim_z, lim_y = 40.0, 40.0, 40.0
