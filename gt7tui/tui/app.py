@@ -199,7 +199,7 @@ class GT7App(App):
             return "tiny"
         if w < 110 or h < 32:
             return "compact"
-        if w < 240:
+        if w < 200:
             return "wide"
         return "ultra"
 
