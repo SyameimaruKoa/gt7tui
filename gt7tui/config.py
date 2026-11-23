@@ -33,7 +33,7 @@ def default_config() -> dict[str, Any]:
                 "1537": "FWD",
                 "3568": "FWD",
                 "3561": "FWD",
-                "3219": "RWD",
+                "3219": "AWD",   # motor-assist AWD
                 "2120": "AWD",
             },
         },

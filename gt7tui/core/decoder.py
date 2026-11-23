@@ -302,7 +302,6 @@ KNOWN_DRIVE_LAYOUT: dict[int, str] = {
     1537: "FWD",   # Prius
     3568: "FWD",   # Qashqai (user: FF)
     3561: "FWD",   # Ioniq BEV
-    3219: "RWD",   # NSX (mid-engine RWD)
     2120: "AWD",   # Italdesign VGT (TBD - confirm)
     3385: "RWD",   # RR car (user verified)
 }
