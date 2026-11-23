@@ -78,12 +78,12 @@ class StateStore:
                     ax = (v[0] - st._prev_velocity[0]) / dt
                     ay = (v[1] - st._prev_velocity[1]) / dt
                     az = (v[2] - st._prev_velocity[2]) / dt
-                    # smooth to reduce per-packet jitter; clamp implausible spikes
+                    # Light smoothing only - favour live responsiveness over jitter
+                    # suppression; clamp implausible spikes.
                     def smooth_g(prev: float, raw: float) -> float:
                         raw = max(-6.0, min(6.0, raw))
-                        val = prev * 0.8 + raw * 0.2
-                        # rate limit: at most 0.5G change per update
-                        delta = max(-0.5, min(0.5, val - prev))
+                        val = prev * 0.35 + raw * 0.65
+                        delta = max(-2.0, min(2.0, val - prev))
                         return max(-6.0, min(6.0, prev + delta))
                     st.g_longitudinal = smooth_g(st.g_longitudinal, ax / 9.81)
                     st.g_lateral = smooth_g(st.g_lateral, ay / 9.81)

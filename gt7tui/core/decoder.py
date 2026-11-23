@@ -304,6 +304,7 @@ KNOWN_DRIVE_LAYOUT: dict[int, str] = {
     3561: "FWD",   # Ioniq BEV
     3219: "RWD",   # NSX (mid-engine RWD)
     2120: "AWD",   # Italdesign VGT (TBD - confirm)
+    3385: "RWD",   # RR car (user verified)
 }
 
 

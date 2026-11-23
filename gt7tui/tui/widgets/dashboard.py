@@ -667,7 +667,7 @@ class GSensorBlock(Static):
         self._peak_lat = max(self._peak_lat, abs(x))
         self._peak_lng = max(self._peak_lng, abs(z))
 
-        # 2D map: rows = longitudinal (top=accelerate), cols = lateral (right=+)
+        # 2D map: rows = longitudinal (top=braking), cols = lateral (right=+)
         rows = 15 if not compact else 9
         cols = 15 if not compact else 9
         grid = [["·" for _ in range(cols)] for _ in range(rows)]
@@ -686,12 +686,12 @@ class GSensorBlock(Static):
         nx = max(-1.0, min(1.0, x / lim_x))
         nz = max(-1.0, min(1.0, z / lim_z))
         px = cx + int(round(nx * (cx - 1)))
-        pz = cz - int(round(nz * (cz - 1)))
+        pz = cz + int(round(nz * (cz - 1)))  # +surge (accel) down, -surge (brake) up
         px = max(0, min(cols - 1, px)); pz = max(0, min(rows - 1, pz))
         grid[pz][px] = "●"
 
         out = Text()
-        out.append(Text(f" {'ACC':>9} ", style="grey50"))
+        out.append(Text(f" {'BRK':>9} ", style="grey50"))
         out.append("\n")
         for r in range(rows):
             out.append("  ")
@@ -704,7 +704,7 @@ class GSensorBlock(Static):
                     st = "grey50"
                 out.append(ch, style=st)
             out.append("\n")
-        out.append(Text(f" {'BRK':>9}   L        R   x{x:+.1f} z{z:+.1f}", style="grey70"))
+        out.append(Text(f" {'ACC':>9}   L        R   x{x:+.1f} z{z:+.1f}", style="grey70"))
 
         # vertical 1D bar
         vert_ratio = max(-1.0, min(1.0, (y or 0.0) / lim_y))
