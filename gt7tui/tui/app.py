@@ -6,7 +6,6 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Footer, Header, Static, TabbedContent, TabPane
 
 from ..config import AppConfig
-from ..core.decoder import set_known_layouts
 from ..core.demo import DemoSource
 from ..core.receiver import LiveReceiver
 from ..core.replay import ReplaySource
@@ -145,7 +144,6 @@ class GT7App(App):
         yield Footer()
 
     def on_mount(self) -> None:
-        set_known_layouts(self.config.drive_layouts)
         self.title = "gt7tui"
         sub = f"mode={self.config.mode}"
         if self.config.record_path:

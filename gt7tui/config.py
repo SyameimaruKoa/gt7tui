@@ -28,14 +28,6 @@ def default_config() -> dict[str, Any]:
             "timeout": 10.0,
             "heartbeat_interval_packets": 100,
             "heartbeat": "~",
-            "drive_layouts": {
-                "3572": "AWD",
-                "1537": "FWD",
-                "3568": "FWD",
-                "3561": "FWD",
-                "3219": "AWD",   # motor-assist AWD
-                "2120": "AWD",
-            },
         },
         "ui": {
             "refresh_hz": 20.0,
@@ -123,7 +115,6 @@ class AppConfig:
     refresh_hz: float = 20.0
     heartbeat_interval_packets: int = 100
     heartbeat: str = "~"
-    drive_layouts: dict[str, str] = field(default_factory=dict)
     layout: str = "default"
     curves_path: str = "gt7tui_curves.json"
     show: dict[str, bool] = field(default_factory=lambda: {"dashboard": True, "tyres": True, "detail": True, "curve": True})
@@ -185,7 +176,6 @@ def build_config(file_cfg: dict[str, Any] | None = None, cli: dict[str, Any] | N
         refresh_hz=float(ui.get("refresh_hz", 20.0)),
         heartbeat_interval_packets=int(net.get("heartbeat_interval_packets", 100)),
         heartbeat=str(net.get("heartbeat", "~")),
-        drive_layouts=dict(net.get("drive_layouts", {})),
         layout=str(ui.get("layout", "default")),
         curves_path=str(ui.get("curves_path", "gt7tui_curves.json")),
         show=dict(ui.get("show", {"dashboard": True, "tyres": True, "detail": True, "curve": True})),
