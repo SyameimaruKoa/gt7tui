@@ -293,33 +293,6 @@ def wheel_drive_state(frame: TelemetryFrame, wheel_key: str) -> str:
     return "ROL"
 
 
-# Known drive layouts per car_id.  Overrides slip-based detection, which is
-# unreliable on gravel/dirt (excessive wheel slip) and for FWD hybrids whose
-# undriven rear wheels still slip slightly.
-# Values: "FWD", "RWD", "AWD", or None (use slip-based detection).
-KNOWN_DRIVE_LAYOUT: dict[int, str] = {
-    3572: "AWD",   # CR-V (user: AWD)
-    1537: "FWD",   # Prius
-    3568: "FWD",   # Qashqai (user: FF)
-    3561: "FWD",   # Ioniq BEV
-    2120: "AWD",   # Italdesign VGT (TBD - confirm)
-    3385: "RWD",   # RR car (user verified)
-}
-
-
-def known_layout(car_id: int) -> str | None:
-    return KNOWN_DRIVE_LAYOUT.get(car_id)
-
-
-def set_known_layouts(layouts: dict[str, str]) -> None:
-    """Override known layouts from configuration (car_id string -> layout)."""
-    for k, v in layouts.items():
-        try:
-            KNOWN_DRIVE_LAYOUT[int(k)] = str(v).upper()
-        except (ValueError, TypeError):
-            continue
-
-
 def drivetrain_layout(frame: TelemetryFrame, slip_threshold: float = 1.05) -> str:
     """Return known drive layout for the car, else detect from relative slip.
 
@@ -328,9 +301,6 @@ def drivetrain_layout(frame: TelemetryFrame, slip_threshold: float = 1.05) -> st
     Compare front vs rear averages: the axle with clearly greater slip is driven.
     AWD only when both axles have significant AND comparable slip.
     """
-    known = known_layout(frame.car_id)
-    if known is not None:
-        return known
     if not frame.tyres:
         return "--"
     def avg(keys):
@@ -341,16 +311,23 @@ def drivetrain_layout(frame: TelemetryFrame, slip_threshold: float = 1.05) -> st
     rear = avg(("RL", "RR"))
     if front is None or rear is None:
         return "--"
-    # excess slip above 1.0
+    # Excess slip above 1.0. Motor-assist AWD cars show a tiny amount of
+    # front slip (~1.001) that is invisible to a plain FWD/RWD threshold.
+    # If both axles exceed 1.0 (even slightly), the second axle is likely
+    # driven -> report AWD? rather than incorrectly naming a single axle.
     fe = max(0.0, front - 1.0)
     re = max(0.0, rear - 1.0)
-    if fe < 0.01 and re < 0.01:
+    if front <= 1.0 and rear <= 1.0:
         return "COAST"
-    # relative dominance: driven axle has clearly more excess slip
-    if fe >= 0.01 and re >= 0.01:
-        if abs(fe - re) <= 0.02 and min(fe, re) >= 0.015:
+    if front > 1.0 and rear > 1.0:
+        # Both axles slipping: distinguish strong AWD from assist-on-demand.
+        # A tiny front excess (<0.005) is sensor noise, not assist drive.
+        if fe < 0.005:
+            return "RWD"
+        if min(fe, re) >= 0.01 and abs(fe - re) <= 0.05:
             return "AWD"
-        return "FWD" if fe > re else "RWD"
+        return "AWD?"
+    # Only one axle clearly above 1.0
     return "FWD" if fe > re else "RWD"
 
 
