@@ -834,13 +834,27 @@ class HVBatteryBlock(Static):
         g.add_row(Text("  REGEN <--|--> ASSIST (battery discharge)", style="grey50"))
         if frame.motor_outputs is not None:
             vals = frame.motor_outputs
-            bt = Text("  MTR ")
-            for i, v in enumerate(vals):
-                bt.append(f"[{i}] ", style="grey50")
-                bt.append(f"{v:+.2f}", style="bold bright_cyan")
-                bt.append("  ", style="")
-            g.add_row(bt)
-            g.add_row(Text(f"  MTR sum {sum(vals):+.2f}", style="grey70"))
+            if any(abs(v) > 1e-4 for v in vals):
+                # Individual motors are actually reporting - show each as a bar.
+                for i, v in enumerate(vals):
+                    ratio = max(0.0, min(1.0, abs(v)))
+                    bw = 16
+                    filled = int(round(ratio * bw))
+                    col = "bold bright_cyan" if v >= 0 else "bold bright_magenta"
+                    bt = Text()
+                    bt.append(f"  MTR{i} ", style="grey70")
+                    bt.append("[", style="grey50")
+                    for j in range(bw):
+                        if j < filled:
+                            bt.append("━", style=col)
+                        else:
+                            bt.append("─", style="grey23")
+                    bt.append("]", style="grey50")
+                    bt.append(f" {v:+.2f}", style=col)
+                    g.add_row(bt)
+                g.add_row(Text(f"  MTR sum {sum(vals):+.2f}", style="grey70"))
+            else:
+                g.add_row(Text("  MTR [0]-[3] -- (not reported)", style="grey50"))
         if frame.engine_output is not None:
             g.add_row(Text(f"  ENG {frame.engine_output:+.2f}", style="grey70"))
         return _panel(g, title="HV Battery", border_style="green")
@@ -863,18 +877,19 @@ class DashboardPane(ScrollableContainer):
         self.layout_stats = LayoutStatsBlock(classes="wide-only")
 
     def compose(self) -> ComposeResult:
-        with Horizontal():
-            with Vertical():
+        with Container(id="dash-cols"):
+            with Vertical(classes="dash-col col-a"):
                 yield self.pedals_block
                 yield self.lap_block
                 yield self.gsensor_block
                 yield self.session_block
-            with Vertical(classes="wide-right"):
+            with Vertical(classes="dash-col col-b"):
                 yield self.rpm_block
                 yield self.speed_block
                 yield self.vehicle_block
                 yield self.boost_block
                 yield self.hv_battery
+            with Vertical(classes="dash-col col-c"):
                 yield self.layout_stats
                 yield self.tyre_summary
 

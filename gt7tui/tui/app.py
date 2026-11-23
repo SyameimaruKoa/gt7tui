@@ -43,39 +43,23 @@ class GT7App(App):
         height: 1fr;
         overflow-y: auto;
     }
-    DashboardPane > Horizontal {
+    /* Dashboard uses a grid: 1 / 2 / 3 columns depending on terminal width. */
+    #dash-cols {
         height: auto;
     }
-    /* Right column carries pedals + vehicle + boost + HV + G + tyres; give it
-       roughly twice the width of the gauge/lap column instead of splitting evenly. */
-    DashboardPane > Horizontal > Vertical {
-        height: auto;
-        width: 1fr;
-    }
-    DashboardPane > Horizontal > Vertical.wide-right {
-        width: 2fr;
-    }
-    DashboardPane > Horizontal > Vertical > Horizontal {
+    .dash-col {
         height: auto;
     }
+    .ultra #dash-cols { layout: grid; grid-size: 3 1; }
+    .wide #dash-cols { layout: grid; grid-size: 2 2; }
+    .compact #dash-cols { layout: grid; grid-size: 2 2; }
+    .tiny #dash-cols { layout: grid; grid-size: 1 3; }
     DashboardPane RpmBlock, DashboardPane SpeedBlock {
         height: auto;
         width: 1fr;
     }
     DashboardPane PedalsBlock, DashboardPane LapBlock, DashboardPane VehicleBlock, DashboardPane BoostBlock, DashboardPane HVBatteryBlock, DashboardPane SessionBlock, DashboardPane TyreSummaryBlock, DashboardPane GSensorBlock, DashboardPane LayoutStatsBlock {
         height: auto;
-    }
-    /* Tiny screens (<80 cols): stack everything in one full-width column. */
-    .tiny DashboardPane > Horizontal {
-        layout: vertical;
-        height: auto;
-    }
-    .tiny DashboardPane > Horizontal > Vertical {
-        width: 100%;
-        height: auto;
-    }
-    .tiny DashboardPane RpmBlock, .tiny DashboardPane SpeedBlock {
-        width: 100%;
     }
     DetailPane {
         layout: vertical;
@@ -217,13 +201,16 @@ class GT7App(App):
             return "tiny"
         if w < 110 or h < 32:
             return "compact"
-        return "wide"
+        if w < 240:
+            return "wide"
+        return "ultra"
 
     def _apply_layout_mode(self) -> str:
         mode = self._layout_mode()
         self.screen.set_class(mode == "tiny", "tiny")
         self.screen.set_class(mode == "compact", "compact")
         self.screen.set_class(mode == "wide", "wide")
+        self.screen.set_class(mode == "ultra", "ultra")
         return mode
 
     def on_resize(self, event) -> None:
