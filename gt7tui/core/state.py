@@ -26,6 +26,7 @@ class RuntimeState:
     current_lap_start_mono: float = 0.0
     current_lap_seen: int = -1
     current_lap_time_s: float = 0.0
+    current_car_id: int = -1
     ev_peak_charge: float = 0.0
     ev_last_charge: float = 0.0
 
@@ -60,6 +61,21 @@ class StateStore:
             st.last_packet_id = frame.packet_id
             st.packets_decoded += 1
             st.last_error = ""
+            # Reset per-car accumulators when the car/session changes, so stats
+            # never mix data from different cars or races.
+            if st.current_car_id != frame.car_id:
+                st.current_car_id = frame.car_id
+                st.ev_peak_charge = 0.0
+                st.ev_last_charge = 0.0
+                st.layout_counts = {}
+                st.layout_throttle = {}
+                st.layout_speed = {}
+                st.layout_total = 0
+                st._prev_velocity = None
+                st._prev_vel_time = 0.0
+                st.g_lateral = 0.0
+                st.g_longitudinal = 0.0
+                st.g_vertical = 0.0
             # EV battery: track peak charge this session to derive SOC
             if frame.is_ev:
                 if frame.fuel_or_charge > st.ev_peak_charge:
@@ -151,6 +167,7 @@ class StateStore:
                 current_lap_start_mono=st.current_lap_start_mono,
                 current_lap_seen=st.current_lap_seen,
                 current_lap_time_s=st.current_lap_time_s,
+                current_car_id=st.current_car_id,
                 ev_peak_charge=st.ev_peak_charge,
                 ev_last_charge=st.ev_last_charge,
                 g_lateral=st.g_lateral,

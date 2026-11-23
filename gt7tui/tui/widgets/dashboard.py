@@ -673,6 +673,12 @@ class GSensorBlock(Static):
         if x is None or z is None:
             return _panel(Text("No G data", style="dim"), title="G", border_style="bright_yellow")
 
+        # Reset peak-hold when the car changes so stats are not mixed across cars
+        car_id = frame.car_id if frame else -1
+        if getattr(self, "_peak_car_id", -1) != car_id:
+            self._peak_car_id = car_id
+            self._peak_lat = 0.0
+            self._peak_lng = 0.0
         self._peak_lat = max(self._peak_lat, abs(x))
         self._peak_lng = max(self._peak_lng, abs(z))
 
