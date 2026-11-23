@@ -465,7 +465,10 @@ class VehicleBlock(Static):
         cur = frame.fuel_or_charge
         if frame.is_ev:
             # BEV: fuel_capacity = 0, fuel_or_charge is remaining charge.
-            # Use the session peak as the effective full-charge reference.
+            # A 0 reading is an invalid/untransmitted value (not depletion) -
+            # keep the last valid charge so a no-drain session stays at full.
+            cur = snap.ev_last_charge if cur <= 0 and snap.ev_last_charge > 0 else cur
+            # Session peak is the effective full-charge reference.
             peak = snap.ev_peak_charge if snap.ev_peak_charge > 0 else cur
             pct = (cur / peak * 100.0) if peak > 0 else 0.0
             ref = peak

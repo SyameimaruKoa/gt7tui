@@ -27,6 +27,7 @@ class RuntimeState:
     current_lap_seen: int = -1
     current_lap_time_s: float = 0.0
     ev_peak_charge: float = 0.0
+    ev_last_charge: float = 0.0
 
     # G sensor (derived from velocity delta): lateral, longitudinal, vertical in G
     g_lateral: float = 0.0
@@ -60,8 +61,11 @@ class StateStore:
             st.packets_decoded += 1
             st.last_error = ""
             # EV battery: track peak charge this session to derive SOC
-            if frame.is_ev and frame.fuel_or_charge > st.ev_peak_charge:
-                st.ev_peak_charge = frame.fuel_or_charge
+            if frame.is_ev:
+                if frame.fuel_or_charge > st.ev_peak_charge:
+                    st.ev_peak_charge = frame.fuel_or_charge
+                if frame.fuel_or_charge > 0:
+                    st.ev_last_charge = frame.fuel_or_charge
             # Drivetrain layout statistics (on-demand AWD detection)
             lay = drivetrain_layout(frame)
             st.layout_counts[lay] = st.layout_counts.get(lay, 0) + 1
@@ -148,6 +152,7 @@ class StateStore:
                 current_lap_seen=st.current_lap_seen,
                 current_lap_time_s=st.current_lap_time_s,
                 ev_peak_charge=st.ev_peak_charge,
+                ev_last_charge=st.ev_last_charge,
                 g_lateral=st.g_lateral,
                 g_longitudinal=st.g_longitudinal,
                 g_vertical=st.g_vertical,
